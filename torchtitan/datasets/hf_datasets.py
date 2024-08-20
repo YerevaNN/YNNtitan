@@ -13,6 +13,7 @@ from torch.utils.data import IterableDataset
 
 from torchdata.stateful_dataloader import StatefulDataLoader
 
+
 from torchtitan.datasets.tokenizer import Tokenizer
 from torchtitan.logging import logger
 
@@ -140,6 +141,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         # As skipping to the end throws an error in case of map-style dataset, return an empty iterator
         if isinstance(self._data, Dataset) and self._sample_idx == len(self._data):
             return iter([])
+
 
         return iter(self._data.skip(self._sample_idx))
 
