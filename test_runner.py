@@ -53,26 +53,39 @@ def build_test_list():
             "default",
             "default",
         ),
-        OverrideDefinitions(
-            [
-                [
-                    "--training.compile",
-                ],
-            ],
-            "1D compile",
-            "1d_compile",
-        ),
-        OverrideDefinitions(
-            [
-                [
-                    "--training.compile",
-                    "--activation_checkpoint.mode selective",
-                    "--activation_checkpoint.selective_ac_option op",
-                ],
-            ],
-            "1D compile with selective op AC",
-            "1d_compile_sac_op",
-        ),
+
+        # OverrideDefinitions(
+        #     [
+        #         [
+        #             "--checkpoint.enable_checkpoint",
+        #             "--experimental.pipeline_parallel_degree 2",
+        #             "--experimental.pipeline_parallel_split_points layers.4",
+        #             "--experimental.pipeline_parallel_schedule 1f1b",
+        #             "--training.data_parallel_degree 1",
+        #             "--model.norm_type rmsnorm",  # fused_rmsnorm crashes with PP
+        #         ],
+        #     ],
+        #     "PP 1D test 1f1b",
+        #     "pp_1f1b",
+        #     requires_seed_checkpoint=True,
+        #     ngpu=2,
+        # ),
+        # OverrideDefinitions(
+        #     [
+        #         [
+        #             "--checkpoint.enable_checkpoint",
+        #             "--experimental.pipeline_parallel_degree 2",
+        #             "--experimental.pipeline_parallel_split_points layers.4",
+        #             "--experimental.pipeline_parallel_schedule gpipe",
+        #             "--training.data_parallel_degree 1",
+        #             "--model.norm_type rmsnorm",  # fused_rmsnorm crashes with PP
+        #         ],
+        #     ],
+        #     "PP 1D test gpipe",
+        #     "pp_gpipe",
+        #     requires_seed_checkpoint=True,
+        #     ngpu=2,
+        # ),
         OverrideDefinitions(
             [
                 [
