@@ -6,7 +6,7 @@
 
 import torch
 from torchtitan.datasets.hf_datasets import build_hf_data_loader
-from torchtitan.datasets.tokenizer import build_tokenizer
+from torchtitan.tokenizers.tokenizer import build_tokenizer
 
 
 class TestCheckpoint:
@@ -41,8 +41,7 @@ class TestCheckpoint:
     def _build_dataloader(
         self, dataset_name, dataset_path, batch_size, seq_len, world_size, rank
     ):
-        tokenizer_type = "tiktoken"
-        tokenizer = build_tokenizer("tiktoken", "./test/assets/test_tiktoken.model")
+        tokenizer = build_tokenizer("custom", "./torchtitan/tokenizers/chemlactica-125m")
         return build_hf_data_loader(
             dataset_name=dataset_name,
             dataset_path=dataset_path,

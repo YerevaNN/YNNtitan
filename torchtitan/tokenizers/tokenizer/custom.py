@@ -5,37 +5,34 @@
 # LICENSE file in the root directory of this source tree.
 
 # copied and adjusted from https://github.com/facebookresearch/llama/blob/main/llama/tokenizer.py
-
 from typing import List
 
-from sentencepiece import SentencePieceProcessor
-
-from torchtitan.datasets.tokenizer.tokenizer import Tokenizer
 from torchtitan.logging import logger
+from transformers import AutoTokenizer
 
 
-class SentencePieceTokenizer(Tokenizer):
+class CustomTokenizer:
     """
-    Tokenizing and encoding/decoding text based on a SentencePiece model.
+    Tokenizing and encoding/decoding text based on a Huggingface model.
 
     Args:
-        tokenizer_path (str): The path to the SentencePiece model file.
+        tokenizer_path (str): The path to the Huggingface model file.
     """
 
     def __init__(self, tokenizer_path: str):
-        super().__init__(tokenizer_path)
+
         # reload tokenizer
-        self.sp_model = SentencePieceProcessor(model_file=tokenizer_path)
+        self.model = AutoTokenizer.from_pretrained(tokenizer_path)
 
         # BOS / EOS token IDs
-        self._n_words: int = self.sp_model.vocab_size()
-        self.bos_id: int = self.sp_model.bos_id()
-        self.eos_id: int = self.sp_model.eos_id()
-        self.pad_id: int = self.sp_model.pad_id()
+        self._n_words: int = self.model.vocab_size
+        self.bos_id: int = self.model.bos_token_id
+        self.eos_id: int = self.model.eos_token_id
+        self.pad_id: int = self.model.pad_token_id
+        self.unk_id: int = self.model.unk_token_id
         logger.info(
-            f"SentencePieceTokenizer built: #words {self.n_words}, BOS ID {self.bos_id}, EOS ID {self.eos_id}"
+            f"CustomTokenizer built: #words {self.n_words}, BOS ID {self.bos_id}, EOS ID {self.eos_id}"
         )
-        assert self.sp_model.vocab_size() == self.sp_model.get_piece_size()
 
     def encode(self, s: str, bos: bool, eos: bool) -> List[int]:
         """
@@ -50,11 +47,14 @@ class SentencePieceTokenizer(Tokenizer):
             List[int]: A list of token IDs.
         """
         assert type(s) is str
-        t = self.sp_model.encode(s)
+
+        t = self.model.encode(s, add_special_tokens=False)
+
         if bos:
             t = [self.bos_id] + t
         if eos:
             t = t + [self.eos_id]
+            
         return t
 
     def decode(self, t: List[int]) -> str:
@@ -67,4 +67,9 @@ class SentencePieceTokenizer(Tokenizer):
         Returns:
             str: The decoded string.
         """
-        return self.sp_model.decode(t)
+        return self.model.decode(t)
+    
+    @property
+    def n_words(self) -> int:
+        return self._n_words
+
