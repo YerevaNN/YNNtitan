@@ -4,35 +4,25 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional
+import os
 
-from requests.exceptions import HTTPError
+from transformers import AutoTokenizer
 
 
-def hf_download(
-    repo_id: str, tokenizer_path: str, local_dir: str, hf_token: Optional[str] = None
-) -> None:
-    from huggingface_hub import hf_hub_download
+def hf_download(repo_id: str, local_dir: str) -> None:
+    # Add the tokenizer name to the path
+    tokenizer_dir = local_dir + repo_id.split("/")[-1]
 
-    tokenizer_path = (
-        f"{tokenizer_path}/tokenizer.model" if tokenizer_path else "tokenizer.model"
-    )
+    # Don't download if exists
+    if os.path.isdir(tokenizer_dir) and os.listdir(tokenizer_dir):
+        print(f"The directory {tokenizer_dir} exists and it's not empty.")  
+        return
 
-    try:
-        hf_hub_download(
-            repo_id=repo_id,
-            filename=tokenizer_path,
-            local_dir=local_dir,
-            local_dir_use_symlinks=False,
-            token=hf_token,
-        )
-    except HTTPError as e:
-        if e.response.status_code == 401:
-            print(
-                "You need to pass a valid `--hf_token=...` to download private checkpoints."
-            )
-        else:
-            raise e
+    # Load the tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(repo_id, token=False)
+
+    # Save the tokenizer
+    tokenizer.save_pretrained(tokenizer_dir)
 
 
 if __name__ == "__main__":
@@ -42,24 +32,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--repo_id",
         type=str,
-        default="meta-llama/Meta-Llama-3-8B",
-        help="Repository ID to download from. default to Llama-3-8B",
-    )
-    parser.add_argument(
-        "--tokenizer_path",
-        type=str,
-        default="",
-        help="the tokenizer.model path relative to repo_id",
-    )
-    parser.add_argument(
-        "--hf_token", type=str, default=None, help="HuggingFace API token"
+        default="yerevann/chemlactica-125m",
+        help="Repository ID to download from. default to chemlactica-125m",
     )
     parser.add_argument(
         "--local_dir",
         type=str,
-        default="torchtitan/datasets/tokenizer/",
+        default="torchtitan/tokenizers/",
         help="local directory to save the tokenizer.model",
     )
 
     args = parser.parse_args()
-    hf_download(args.repo_id, args.tokenizer_path, args.local_dir, args.hf_token)
+    hf_download(args.repo_id, args.local_dir)
