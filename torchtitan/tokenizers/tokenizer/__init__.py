@@ -4,9 +4,9 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from torchtitan.datasets.tokenizer.sentencepiece import SentencePieceTokenizer
-from torchtitan.datasets.tokenizer.tiktoken import TikTokenizer
-from torchtitan.datasets.tokenizer.tokenizer import Tokenizer
+from torchtitan.tokenizers.tokenizer.sentencepiece import SentencePieceTokenizer
+from torchtitan.tokenizers.tokenizer.tiktoken import TikTokenizer
+from torchtitan.tokenizers.tokenizer.tokenizer import Tokenizer
 
 from torchtitan.logging import logger
 
