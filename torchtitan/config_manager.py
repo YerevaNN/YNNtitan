@@ -363,6 +363,14 @@ class JobConfig:
             help="Python garbage control scheduling interval, in steps",
         )
 
+        # validation configs
+        self.parser.add_argument(
+            "--validation.dataset", type=str, default="c4_mini", help="Dataset to use"
+        )
+        self.parser.add_argument(
+            "--validation.batch_size", type=int, default=0
+        )
+
         # checkpointing configs
         self.parser.add_argument(
             "--checkpoint.enable_checkpoint",

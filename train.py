@@ -288,7 +288,7 @@ def main(job_config: JobConfig):
 
             losses_since_last_log.append(loss)
 
-            # log metrics
+            # log train metrics
             if (
                 train_state.step == 1
                 or train_state.step % job_config.metrics.log_freq == 0
