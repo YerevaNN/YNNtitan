@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if ! command -v pre-commit &> /dev/null
+then
+    echo "Error: pre-commit is not installed. Please install it using 'pip install pre-commit'"
+    exit 1
+fi
+
+if ! pre-commit run --all-files; then
+    echo "Pre-commit checks failed. Please fix the issues and try committing again."
+    exit 1
+fi
