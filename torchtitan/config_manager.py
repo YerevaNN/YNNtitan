@@ -365,10 +365,17 @@ class JobConfig:
 
         # validation configs
         self.parser.add_argument(
+            "--validation.batch_size", type=int, default=0
+        )
+        self.parser.add_argument(
             "--validation.dataset", type=str, default="c4_mini", help="Dataset to use"
         )
         self.parser.add_argument(
-            "--validation.batch_size", type=int, default=0
+            "--validation.dataset_path",
+            type=str,
+            help="""
+                Path to the dataset for validation in the file system. If provided, data will be
+                loaded from this path instead of downloaded.""",
         )
 
         # checkpointing configs

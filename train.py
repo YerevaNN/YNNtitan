@@ -101,6 +101,18 @@ def main(job_config: JobConfig):
         dp_rank,
     )
 
+    # build validation dataloader
+    val_bs = job_config.validation.batch_size if job_config.validation.batch_size != 0 else job_config.metrics.batch_size
+    val_data_loader = build_hf_data_loader(
+        job_config.validation.dataset,
+        job_config.validation.dataset_path,
+        tokenizer,
+        val_bs,
+        job_config.training.seq_len,
+        dp_degree,
+        dp_rank,
+    )
+
     # build model (using meta init)
     model_cls = model_name_to_cls[model_name]
     model_config = models_config[model_name][job_config.model.flavor]
@@ -338,21 +350,21 @@ def main(job_config: JobConfig):
                 gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
 
                 metrics = {
-                    "loss_metrics/global_avg_loss": global_avg_loss,
-                    "loss_metrics/global_max_loss": global_max_loss,
-                    "loss_metrics/global_avg_perplexity": global_avg_perplexity,
-                    "loss_metrics/global_max_perplexity": global_max_perplexity,
-                    "wps": wps,
-                    "mfu(%)": mfu,
-                    "time_metrics/end_to_end(s)": time_end_to_end,
-                    "time_metrics/data_loading(s)": time_data_loading,
-                    "time_metrics/data_loading(%)": time_data_loading_pct,
-                    "memory/max_active(GiB)": gpu_mem_stats.max_active_gib,
-                    "memory/max_active(%)": gpu_mem_stats.max_active_pct,
-                    "memory/max_reserved(GiB)": gpu_mem_stats.max_reserved_gib,
-                    "memory/max_reserved(%)": gpu_mem_stats.max_reserved_pct,
-                    "memory/num_alloc_retries": gpu_mem_stats.num_alloc_retries,
-                    "memory/num_ooms": gpu_mem_stats.num_ooms,
+                    "train/loss_metrics/global_avg_loss": global_avg_loss,
+                    "train/loss_metrics/global_max_loss": global_max_loss,
+                    "train/loss_metrics/global_avg_perplexity": global_avg_perplexity,
+                    "train/loss_metrics/global_max_perplexity": global_max_perplexity,
+                    "train/wps": wps,
+                    "train/mfu(%)": mfu,
+                    "train/time_metrics/end_to_end(s)": time_end_to_end,
+                    "train/time_metrics/data_loading(s)": time_data_loading,
+                    "train/time_metrics/data_loading(%)": time_data_loading_pct,
+                    "train/memory/max_active(GiB)": gpu_mem_stats.max_active_gib,
+                    "train/memory/max_active(%)": gpu_mem_stats.max_active_pct,
+                    "train/memory/max_reserved(GiB)": gpu_mem_stats.max_reserved_gib,
+                    "train/memory/max_reserved(%)": gpu_mem_stats.max_reserved_pct,
+                    "train/memory/num_alloc_retries": gpu_mem_stats.num_alloc_retries,
+                    "train/memory/num_ooms": gpu_mem_stats.num_ooms,
                 }
                 metric_logger.log(metrics, step=train_state.step)
 
@@ -370,6 +382,7 @@ def main(job_config: JobConfig):
                 data_loading_times.clear()
                 time_last_log = time.perf_counter()
                 gpu_memory_monitor.reset_peak_stats()
+
 
             checkpoint.save(
                 train_state.step, force=(train_state.step == job_config.training.steps)
