@@ -1,0 +1,26 @@
+#!/bin/sh
+
+# Check if this script is symlinked to .git/hooks/pre-commit
+if [ "$(readlink -f "$0")" != "$(readlink -f "$(git rev-parse --git-dir)/hooks/pre-commit")" ]; then
+    echo "Error: pre-commit hook is not installed correctly."
+    echo "Please run the install_hooks.sh script in the repository root."
+    exit 1
+fi
+
+# Check if pre-commit is installed
+if ! command -v pre-commit >/dev/null 2>&1; then
+    echo "Error: pre-commit is not installed."
+    echo "Please install pre-commit using: pip install pre-commit"
+    echo "Then set up the pre-commit hooks using: pre-commit install"
+    exit 1
+fi
+
+# Check if pre-commit-msg is installed
+if ! grep -q "pre-commit-msg" "$(git rev-parse --git-dir)/hooks/commit-msg" 2>/dev/null; then
+    echo "Error: pre-commit-msg hook is not installed."
+    echo "Please set up the pre-commit-msg hook using: pre-commit install --hook-type commit-msg"
+    exit 1
+fi
+
+# If both are installed, run pre-commit
+exec pre-commit
