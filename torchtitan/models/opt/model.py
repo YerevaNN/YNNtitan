@@ -9,7 +9,7 @@
 
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -51,7 +51,6 @@ def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 class LearnedPositionalEmbedding(nn.Embedding):
-    
     def __init__(self, num_embeddings: int, embedding_dim: int):
         # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
@@ -59,7 +58,9 @@ class LearnedPositionalEmbedding(nn.Embedding):
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
     def forward(self, positions):
-        return super().forward(positions + self.offset - 1) # subtract one to offset the indices to 0
+        return super().forward(
+            positions + self.offset - 1
+        )  # subtract one to offset the indices to 0
 
 
 class Attention(nn.Module):
@@ -141,7 +142,13 @@ class Attention(nn.Module):
         xv = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
 
         # we use casual mask for training, add attention dropout during the training
-        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True, dropout_p=self.dropout_p if self.training else 0.0)
+        output = F.scaled_dot_product_attention(
+            xq,
+            xk,
+            xv,
+            is_causal=True,
+            dropout_p=self.dropout_p if self.training else 0.0,
+        )
         output = output.transpose(
             1, 2
         ).contiguous()  # (bs, seqlen, n_local_heads, head_dim)
@@ -172,7 +179,7 @@ class FeedForward(nn.Module):
         hidden_dim: int,
         multiple_of: int,
         ffn_dim_multiplier: Optional[float],
-        dropout_p: float
+        dropout_p: float,
     ):
         super().__init__()
         # custom dim factor multiplier
@@ -226,7 +233,7 @@ class TransformerBlock(nn.Module):
             hidden_dim=4 * model_args.dim,
             multiple_of=model_args.multiple_of,
             ffn_dim_multiplier=model_args.ffn_dim_multiplier,
-            dropout_p=model_args.dropout_p
+            dropout_p=model_args.dropout_p,
         )
         self.layer_id = layer_id
         self.num_layers = model_args.n_layers
@@ -298,7 +305,9 @@ class OPT(nn.Module):
         self.n_layers = model_args.n_layers
 
         self.tok_embeddings = nn.Embedding(model_args.vocab_size, model_args.dim)
-        self.pos_encoder = LearnedPositionalEmbedding(model_args.max_seq_len, model_args.dim)
+        self.pos_encoder = LearnedPositionalEmbedding(
+            model_args.max_seq_len, model_args.dim
+        )
 
         self.layers = torch.nn.ModuleDict()
         for layer_id in range(model_args.n_layers):
@@ -357,7 +366,9 @@ class OPT(nn.Module):
         batch_size, seq_length = tokens.shape
         # passthrough for nonexistent layers, allows easy configuration of pipeline parallel stages
         h = self.tok_embeddings(tokens) if self.tok_embeddings else tokens
-        positions = torch.cumsum(torch.ones(batch_size, seq_length, device=h.device, dtype=torch.long), dim=1)
+        positions = torch.cumsum(
+            torch.ones(batch_size, seq_length, device=h.device, dtype=torch.long), dim=1
+        )
         h = h + self.pos_encoder(positions)
 
         for layer in self.layers.values():

@@ -235,8 +235,12 @@ class CheckpointManager:
             for idx, lr_scheduler in enumerate(lr_schedulers):
                 self.states[f"lr_scheduler_{idx}"] = lr_scheduler
 
-        self.save_folder = os.path.join(job_config.job.dump_folder, ckpt_config.save_folder)
-        self.load_folder = os.path.join(job_config.job.dump_folder, ckpt_config.load_folder)
+        self.save_folder = os.path.join(
+            job_config.job.dump_folder, ckpt_config.save_folder
+        )
+        self.load_folder = os.path.join(
+            job_config.job.dump_folder, ckpt_config.load_folder
+        )
         self.interval_type = (
             IntervalType.SECONDS
             if ckpt_config.interval_type == "seconds"
@@ -324,7 +328,10 @@ class CheckpointManager:
         else:
             logger.info(f"Saving a full checkpoint at last step, step {curr_step}.")
 
-        dcp.save(self.states, checkpoint_id=self._create_checkpoint_id(curr_step, self.save_folder))
+        dcp.save(
+            self.states,
+            checkpoint_id=self._create_checkpoint_id(curr_step, self.save_folder),
+        )
         self.reset()
 
     def _should_save(self, curr_step: int, force: bool = False) -> bool:
@@ -451,7 +458,9 @@ class CheckpointManager:
             return False
         if not os.path.isdir(self.load_folder):
             return False
-        if step != -1 and not os.path.isdir(self._create_checkpoint_id(step, self.load_folder)):
+        if step != -1 and not os.path.isdir(
+            self._create_checkpoint_id(step, self.load_folder)
+        ):
             return False
 
         if step == -1:

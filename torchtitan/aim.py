@@ -7,7 +7,7 @@ from aim.sdk.run import Run
 from aim.sdk.utils import clean_repo_path, get_aim_repo_name
 
 
-class AimLogger():
+class AimLogger:
     def __init__(
         self,
         repo: Optional[str] = None,
@@ -17,9 +17,9 @@ class AimLogger():
         capture_terminal_logs: Optional[bool] = True,
         run_name: Optional[str] = None,
         run_hash: Optional[str] = None,
-        train_metric_prefix: Optional[str] = 'train_',
-        val_metric_prefix: Optional[str] = 'val_',
-        test_metric_prefix: Optional[str] = 'test_',
+        train_metric_prefix: Optional[str] = "train_",
+        val_metric_prefix: Optional[str] = "val_",
+        test_metric_prefix: Optional[str] = "test_",
     ):
         super().__init__()
 
@@ -64,23 +64,25 @@ class AimLogger():
 
     def log_hyperparams(self, params: Dict[str, Any]):
         for key, value in params.items():
-            self.experiment.set(('hparams', key), value, strict=False)
+            self.experiment.set(("hparams", key), value, strict=False)
 
     def log_metrics(self, metrics: Dict[str, float], step: Optional[int] = None):
 
-        metric_items: Dict[str:Any] = {k: v for k, v in metrics.items()} # for modifications to metric_items without affecting the original metrics
+        metric_items: Dict[str:Any] = {
+            k: v for k, v in metrics.items()
+        }  # for modifications to metric_items without affecting the original metrics
         for k, v in metric_items.items():
             name = k
             context = {}
             if self._train_metric_prefix and name.startswith(self._train_metric_prefix):
                 name = name[len(self._train_metric_prefix) :]
-                context['subset'] = 'train'
+                context["subset"] = "train"
             elif self._test_metric_prefix and name.startswith(self._test_metric_prefix):
                 name = name[len(self._test_metric_prefix) :]
-                context['subset'] = 'test'
+                context["subset"] = "test"
             elif self._val_metric_prefix and name.startswith(self._val_metric_prefix):
                 name = name[len(self._val_metric_prefix) :]
-                context['subset'] = 'val'
+                context["subset"] = "val"
             self.experiment.track(v, name=name, step=step, context=context)
 
     def finalize(self) -> None:

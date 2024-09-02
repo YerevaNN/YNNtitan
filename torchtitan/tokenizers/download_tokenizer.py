@@ -15,7 +15,7 @@ def hf_download(repo_id: str, local_dir: str) -> None:
 
     # Don't download if exists
     if os.path.isdir(tokenizer_dir) and os.listdir(tokenizer_dir):
-        print(f"The directory {tokenizer_dir} exists and it's not empty.")  
+        print(f"The directory {tokenizer_dir} exists and it's not empty.")
         return
 
     # Load the tokenizer

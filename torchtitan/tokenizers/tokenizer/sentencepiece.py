@@ -9,9 +9,9 @@
 from typing import List
 
 from sentencepiece import SentencePieceProcessor
+from torchtitan.logging import logger
 
 from torchtitan.tokenizers.tokenizer.tokenizer import Tokenizer
-from torchtitan.logging import logger
 
 
 class SentencePieceTokenizer(Tokenizer):

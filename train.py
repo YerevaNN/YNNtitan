@@ -17,19 +17,19 @@ from torchtitan import utils
 from torchtitan.checkpoint import CheckpointManager, TrainState
 from torchtitan.config_manager import JobConfig
 from torchtitan.datasets import build_hf_data_loader
-from torchtitan.tokenizers.tokenizer import build_tokenizer
 from torchtitan.float8 import Float8Handler
 from torchtitan.logging import init_logger, logger
 from torchtitan.metrics import build_gpu_memory_monitor, build_metric_logger
 from torchtitan.models import (
     model_name_to_cls,
-    model_name_to_weights_loading_fns,
     model_name_to_tokenizer,
-    models_config
+    model_name_to_weights_loading_fns,
+    models_config,
 )
 from torchtitan.optimizer import build_lr_schedulers, build_optimizers
 from torchtitan.parallelisms import models_parallelize_fns, ParallelDims
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
+from torchtitan.tokenizers.tokenizer import build_tokenizer
 
 
 def get_train_context(enable_loss_parallel: bool, enable_compiled_autograd: bool):
@@ -124,8 +124,9 @@ def main(job_config: JobConfig):
         ), "Must create seed-checkpoint using one gpu, to disable sharding"
         model.to_empty(device=init_device)
         model_name_to_weights_loading_fns[model_name](
-            model, weights_path=job_config.checkpoint.load_folder,
-            source=job_config.checkpoint.weights_source
+            model,
+            weights_path=job_config.checkpoint.load_folder,
+            source=job_config.checkpoint.weights_source,
         )
 
     # a no-op hander if float8 is not enabled
@@ -287,7 +288,9 @@ def main(job_config: JobConfig):
                 perplexities = [2 ** loss.item() for loss in losses_since_last_log]
 
                 avg_loss, max_loss = sum(losses) / len(losses), max(losses)
-                avg_perplexity, max_perplexity = sum(perplexities) / len(perplexities), max(perplexities)
+                avg_perplexity, max_perplexity = sum(perplexities) / len(
+                    perplexities
+                ), max(perplexities)
 
                 if parallel_dims.dp_enabled:
                     global_avg_loss, global_max_loss = (
@@ -300,7 +303,10 @@ def main(job_config: JobConfig):
                     )
                 else:
                     global_avg_loss, global_max_loss = avg_loss, max_loss
-                    global_avg_perplexity, global_max_perplexity = avg_perplexity, max_perplexity
+                    global_avg_perplexity, global_max_perplexity = (
+                        avg_perplexity,
+                        max_perplexity,
+                    )
 
                 # update train state
                 train_state.log_steps.append(train_state.step)

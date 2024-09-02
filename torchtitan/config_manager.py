@@ -16,9 +16,9 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib
 
-from torchtitan.logging import logger
-
 from typing import Optional
+
+from torchtitan.logging import logger
 
 TORCH_DTYPE_MAP = {
     "float16": torch.float16,
@@ -560,6 +560,7 @@ class JobConfig:
             type=Optional[str],
             default=None,
         )
+
     def parse_args(self, args_list: list = sys.argv[1:]):
         self.args_list = args_list
 

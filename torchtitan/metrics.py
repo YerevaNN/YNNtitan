@@ -10,10 +10,10 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import torch
+from torchtitan.aim import AimLogger
 from torchtitan.config_manager import JobConfig
 from torchtitan.logging import logger
 from torchtitan.parallelisms import ParallelDims
-from torchtitan.aim import AimLogger
 
 # named tuple for passing GPU memory stats for logging
 GPUMemStats = namedtuple(
@@ -114,11 +114,10 @@ class MetricLogger:
 
     def log_hparams(self, config):
         if self.writer is not None:
-            self.writer.experiment['hparams'] = config
+            self.writer.experiment["hparams"] = config
 
-def build_metric_logger(
-    job_config: JobConfig, parallel_dims: ParallelDims
-):
+
+def build_metric_logger(job_config: JobConfig, parallel_dims: ParallelDims):
     """
     parallel_dims is used to determine the rank to log metrics from if 'aim_config.rank_0_only=True'.
     In that case, `_get_metrics_rank` will be used to calculate which rank acts as 'rank 0'. This is
@@ -138,5 +137,10 @@ def build_metric_logger(
             f"Metrics logging active. Aim logs will be saved at /{save_aim_folder}"
         )
         enable_aim = torch.distributed.get_rank() == 0
-    return MetricLogger(job_config.metrics.aim_hash, job_config.metrics.aim_experiment_name, log_dir, save_aim_folder, enable_aim)
-
+    return MetricLogger(
+        job_config.metrics.aim_hash,
+        job_config.metrics.aim_experiment_name,
+        log_dir,
+        save_aim_folder,
+        enable_aim,
+    )

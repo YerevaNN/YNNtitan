@@ -42,7 +42,9 @@ class TestCheckpoint:
         self, dataset_name, dataset_path, batch_size, seq_len, world_size, rank
     ):
         tokenizer_type = "tiktoken"
-        tokenizer = build_tokenizer("tiktoken", "./torchtitan/tokenizers/chemlactica-125m")
+        tokenizer = build_tokenizer(
+            "tiktoken", "./torchtitan/tokenizers/chemlactica-125m"
+        )
         return build_hf_data_loader(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
