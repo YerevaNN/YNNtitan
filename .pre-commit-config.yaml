@@ -16,10 +16,12 @@ repos:
         args: ['--maxkb=5000']
     -   id: end-of-file-fixer
         exclude: '^(.*\.svg)$'
+
 - repo: https://github.com/commitizen-tools/commitizen
   rev: v3.29.0
   hooks:
     - id: commitizen
+      stages: [commit-msg]
 
 - repo: https://github.com/pycqa/flake8
   rev: 7.1.1
