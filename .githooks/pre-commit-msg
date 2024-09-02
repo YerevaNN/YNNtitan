@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-if ! grep -q "pre-commit" .git/hooks/pre-commit; then
-    echo "Error: pre-commit hook is not installed. Run 'make setup' to set up your development environment."
-    exit 1
-fi
