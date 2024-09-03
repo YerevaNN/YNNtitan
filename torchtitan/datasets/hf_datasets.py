@@ -33,11 +33,11 @@ from datasets.distributed import split_dataset_by_node
 _supported_datasets = {
     "c4_test": "test/assets/c4_test",
     "c4": "allenai/c4",
-    "train_mini": "test/assets/train_mini"
+    "chemlactica_train_mini": "test/assets/chemlactica_train_mini"
 }
 
 _supported_data_processing_styles = {
-    "chemlactica_style": "chemlactica_style_data_processing"
+    "chemlactica_style": chemlactica_style_data_processing
 }
 
 
@@ -112,15 +112,10 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         else:
             ds = load_dataset(dataset_path, split="train")
 
-
-        if data_processing_style in _supported_data_processing_styles:
-            data_processing_fn = eval(_supported_data_processing_styles[data_processing_style])
-        else:
-            raise ValueError(
-                f"Data processing style {data_processing_style} is not supported. "
-                f"Supported data processing styles are: {list(_supported_data_processing_styles.keys())}"
-            )
-
+        try:
+            data_processing_fn = _supported_data_processing_styles[data_processing_style]
+        except KeyError as e:
+            raise ValueError(f"Unsupported data processing style: {data_processing_style}")
 
         # TODO: support shuffling and checkpointing
         self.dataset_name = dataset_name
@@ -142,7 +137,6 @@ class HuggingFaceDataset(IterableDataset, Stateful):
 
         while True:
             for sample_json in self._get_data_iter():
-
                 sample_text = self.data_processing_fn(sample_json, self.rng)
                 sample_tokens = self._tokenizer.encode(sample_text, bos=True, eos=True)
                 self._all_tokens.extend(sample_tokens)
