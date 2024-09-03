@@ -377,6 +377,9 @@ class JobConfig:
                 Path to the dataset for validation in the file system. If provided, data will be
                 loaded from this path instead of downloaded.""",
         )
+        self.parser.add_argument(
+            "--validation.eval_freq", type=str, default=1, help="How often to evaluate the model and log metrics to aim."
+        )
 
         # checkpointing configs
         self.parser.add_argument(
