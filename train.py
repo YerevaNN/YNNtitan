@@ -372,7 +372,14 @@ def main(job_config: JobConfig):
                 time_last_log = time.perf_counter()
                 gpu_memory_monitor.reset_peak_stats()
 
-
+            # log val metrics
+            if (
+                job_config.validation.enable_val
+                and eval_state.step == 1
+                or eval_state.step % job_config.validation.eval_freq == 0
+            ):
+                pass
+            
             checkpoint.save(
                 train_state.step, force=(train_state.step == job_config.training.steps)
             )

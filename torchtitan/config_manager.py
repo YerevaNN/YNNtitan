@@ -378,7 +378,10 @@ class JobConfig:
                 loaded from this path instead of downloaded.""",
         )
         self.parser.add_argument(
-            "--validation.eval_freq", type=str, default=1, help="How often to evaluate the model and log metrics to aim."
+            "--validation.eval_freq", type=int, default=1, help="How often to evaluate the model and log metrics to aim."
+        )
+        self.parser.add_argument(
+            "--validation.enable_val", type=bool, default=1, help="Whether to do validation."
         )
 
         # checkpointing configs

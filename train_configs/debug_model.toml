@@ -47,6 +47,7 @@ dataset = "c4_test"  # supported datasets: c4_test (2K), c4 (177M)
 [validation]
 batch_size = 1
 eval_freq = 3
+enable_val = true
 dataset = "c4_test"  # supported datasets: c4_test (2K), c4 (177M)
 
 [experimental]
