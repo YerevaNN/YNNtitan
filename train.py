@@ -30,6 +30,7 @@ from torchtitan.models import (
 from torchtitan.optimizer import build_lr_schedulers, build_optimizers
 from torchtitan.parallelisms import models_parallelize_fns, ParallelDims
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
+from torchtitan.val import validate
 
 
 def get_train_context(enable_loss_parallel: bool, enable_compiled_autograd: bool):
@@ -98,20 +99,11 @@ def main(job_config: JobConfig):
         job_config.training.batch_size,
         job_config.training.seq_len,
         dp_degree,
-        dp_rank,
+        dp_rank
     )
 
-    # build validation dataloader
+    # validation batch size
     val_bs = job_config.validation.batch_size if job_config.validation.batch_size != 0 else job_config.metrics.batch_size
-    val_data_loader = build_hf_data_loader(
-        job_config.validation.dataset,
-        job_config.validation.dataset_path,
-        tokenizer,
-        val_bs,
-        job_config.training.seq_len,
-        dp_degree,
-        dp_rank,
-    )
 
     # build model (using meta init)
     model_cls = model_name_to_cls[model_name]
@@ -191,6 +183,7 @@ def main(job_config: JobConfig):
     lr_schedulers = build_lr_schedulers(optimizers.optimizers, job_config)
 
     train_state = TrainState()
+    eval_state = TrainState()
 
     # load initial checkpoint
     checkpoint = CheckpointManager(
@@ -229,6 +222,7 @@ def main(job_config: JobConfig):
     ntokens_since_last_log = 0
     data_loading_times = []
     time_last_log = time.perf_counter()
+    time_last_val_log = time.perf_counter()
     gpu_memory_monitor.reset_peak_stats()
 
     checkpoint.reset()
@@ -358,6 +352,7 @@ def main(job_config: JobConfig):
                 metric_logger.log(metrics, step=train_state.step)
 
                 logger.info(
+                    "context: train  "
                     f"{color.cyan}step: {train_state.step:2}  "
                     f"{color.green}loss: {global_avg_loss:7.4f}  "
                     f"{color.yellow}memory: {gpu_mem_stats.max_reserved_gib:5.2f}GiB"
@@ -375,11 +370,37 @@ def main(job_config: JobConfig):
             # log val metrics
             if (
                 job_config.validation.enable_val
-                and eval_state.step == 1
-                or eval_state.step % job_config.validation.eval_freq == 0
+                and train_state.step == 1
+                or train_state.step % job_config.validation.eval_freq == 0
             ):
-                pass
-            
+                with torch.no_grad():
+                    model.eval()
+                    val_data_loader = build_hf_data_loader(
+                        job_config.validation.dataset,
+                        job_config.validation.dataset_path,
+                        tokenizer,
+                        val_bs,
+                        job_config.training.seq_len,
+                        dp_degree,
+                        dp_rank,
+                        False
+                    )
+                    validate(
+                        model,
+                        val_data_loader,
+                        eval_state,
+                        logger,
+                        metric_logger,
+                        parallel_dims, 
+                        gpu_memory_monitor,
+                        data_loading_times,
+                        time_last_val_log,
+                        job_config.validation.eval_freq, 
+                        color,
+                        train_state.step
+                    )
+                model.train()
+
             checkpoint.save(
                 train_state.step, force=(train_state.step == job_config.training.steps)
             )

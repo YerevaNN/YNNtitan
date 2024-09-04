@@ -74,10 +74,13 @@ class AimLogger():
             context = {}
             if self._train_metric_prefix and name.startswith(self._train_metric_prefix):
                 context['subset'] = 'train'
+                name = name[len(self._train_metric_prefix) :]
             elif self._test_metric_prefix and name.startswith(self._test_metric_prefix):
                 context['subset'] = 'test'
+                name = name[len(self._test_metric_prefix) :]
             elif self._val_metric_prefix and name.startswith(self._val_metric_prefix):
                 context['subset'] = 'val'
+                name = name[len(self._val_metric_prefix) :]
             self.experiment.track(v, name=name, step=step, context=context)
 
     def finalize(self, status: str = '') -> None:

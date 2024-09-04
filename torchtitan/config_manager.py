@@ -130,6 +130,7 @@ class JobConfig:
         )
         self.parser.add_argument(
             "--metrics.enable_aim",
+            default=False,
             action="store_true",
             help="Whether to log metrics to aim",
         )
@@ -381,7 +382,7 @@ class JobConfig:
             "--validation.eval_freq", type=int, default=1, help="How often to evaluate the model and log metrics to aim."
         )
         self.parser.add_argument(
-            "--validation.enable_val", type=bool, default=1, help="Whether to do validation."
+            "--validation.enable_val", type=bool, default=False, help="Whether to do validation."
         )
 
         # checkpointing configs
