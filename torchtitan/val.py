@@ -1,11 +1,10 @@
 import time
-import torch
+from torch.nn.functional import cross_entropy
 
 def loss_fn(pred, labels):
-    return torch.nn.functional.cross_entropy(
+    return cross_entropy(
         pred.flatten(0, 1), labels.flatten(0, 1)
     )
-
 
 def validate(
     model,
@@ -19,7 +18,9 @@ def validate(
     time_last_log,
     freq, 
     color,
-    train_step
+    train_step,
+    num_flop_per_token,
+    gpu_peak_flops
 ):
     n_tokens = 0
     total_loss = 0
@@ -50,12 +51,11 @@ def validate(
 
     time_delta = time.perf_counter() - time_last_log
 
-    # tokens per second, abbr. as wps by convention
     wps = n_tokens / (
         time_delta * parallel_dims.model_parallel_size
     )
 
-    # mfu = 100 * num_flop_per_token * wps / gpu_peak_flops
+    mfu = 100 * num_flop_per_token * wps / gpu_peak_flops
 
     time_end_to_end = time_delta / freq
     time_data_loading = sum(data_loading_times) / len(data_loading_times)
@@ -69,7 +69,7 @@ def validate(
         "val/loss_metrics/global_avg_perplexity": perplexity,
         "val/loss_metrics/global_max_perplexity": perplexity,
         "val/wps": wps,
-        # "val/mfu(%)": mfu,
+        "val/mfu(%)": mfu,
         "val/time_metrics/end_to_end(s)": time_end_to_end,
         "val/time_metrics/data_loading(s)": time_data_loading,
         "val/time_metrics/data_loading(%)": time_data_loading_pct,
@@ -89,7 +89,7 @@ def validate(
         f"{color.yellow}memory: {gpu_mem_stats.max_reserved_gib:5.2f}GiB"
         f"({gpu_mem_stats.max_reserved_pct:.2f}%)  "
         f"{color.blue}wps: {round(wps):,}  "
-        # f"{color.magenta}mfu: {mfu:.2f}%{color.reset}"
+        f"{color.magenta}mfu: {mfu:.2f}%{color.reset}"
     )
 
     data_loading_times.clear()

@@ -385,6 +385,11 @@ def main(job_config: JobConfig):
                         dp_rank,
                         False
                     )
+                    num_flop_per_token_val = utils.get_num_flop_per_token_forward(
+                        utils.get_num_params(model, exclude_embedding=True),
+                        model_config,
+                        job_config.training.seq_len,
+                    )
                     validate(
                         model,
                         val_data_loader,
@@ -397,7 +402,9 @@ def main(job_config: JobConfig):
                         time_last_val_log,
                         job_config.validation.eval_freq, 
                         color,
-                        train_state.step
+                        train_state.step,
+                        num_flop_per_token_val,
+                        gpu_peak_flops
                     )
                 model.train()
 

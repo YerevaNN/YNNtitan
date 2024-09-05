@@ -132,6 +132,16 @@ def get_num_flop_per_token(num_params: int, model_config, seq_len) -> int:
 
     return flop_per_token
 
+def get_num_flop_per_token_forward(num_params: int, model_config, seq_len) -> int:
+    l, h, q, t = (
+        model_config.n_layers,
+        model_config.n_heads,
+        model_config.dim // model_config.n_heads,
+        seq_len,
+    )
+    flop_per_token = 2 * num_params + 4 * l * h * q * t
+    return flop_per_token
+
 
 # hardcoded BF16 type peak flops for NVIDIA A100 and H100 GPU
 def get_peak_flops(device_name: str) -> int:
