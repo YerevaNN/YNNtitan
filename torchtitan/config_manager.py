@@ -16,14 +16,15 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib
 
-from torchtitan.logging import logger
+from torchtitan.logging import logger, validate_log_level
+
+from typing import Optional
 
 TORCH_DTYPE_MAP = {
     "float16": torch.float16,
     "float32": torch.float32,
     "bfloat16": torch.bfloat16,
 }
-
 
 def string_list(raw_arg):
     return raw_arg.split(",")
@@ -118,7 +119,7 @@ class JobConfig:
             "--metrics.log_freq",
             type=int,
             default=10,
-            help="How often to log metrics to TensorBoard, in iterations",
+            help="How often to log metrics to aim, in iterations",
         )
         self.parser.add_argument(
             "--metrics.enable_color_printing",
@@ -127,22 +128,22 @@ class JobConfig:
             help="Whether to enable color printing",
         )
         self.parser.add_argument(
-            "--metrics.enable_tensorboard",
+            "--metrics.enable_aim",
             action="store_true",
-            help="Whether to log metrics to TensorBoard",
+            help="Whether to log metrics to aim",
         )
         self.parser.add_argument(
-            "--metrics.save_tb_folder",
+            "--metrics.save_aim_folder",
             type=str,
-            default="tb",
-            help="Folder to dump TensorBoard states",
+            default="aim",
+            help="Folder to dump Aim states",
         )
         self.parser.add_argument(
             "--metrics.rank_0_only",
             default=True,
             action="store_true",
             help="""
-                Whether to save TensorBoard metrics only for rank 0 or for all ranks.
+                Whether to save Aim metrics only for rank 0 or for all ranks.
                 When pipeline_parallel_degree is > 1, this option uses the 0th rank of the last stage pipeline group,
                 which is the only stage that computes loss metrics.
             """,
@@ -179,6 +180,9 @@ class JobConfig:
             "--optimizer.name", type=str, default="AdamW", help="Optimizer to use"
         )
         self.parser.add_argument(
+            "--optimizer.schedule", type=str, default="Linear", help="Optimization schedule to use"
+        )
+        self.parser.add_argument(
             "--optimizer.lr", type=float, default=8e-4, help="Learning rate to use"
         )
         self.parser.add_argument(
@@ -200,7 +204,20 @@ class JobConfig:
                 loaded from this path instead of downloaded.""",
         )
         self.parser.add_argument(
+            "--training.data_processing_style",
+            choices=["chemlactica_style"],
+            default="chemlactica_style",
+            help="""
+                Specifies the method for processing data prior to tokenization.""",
+        )
+        self.parser.add_argument(
             "--training.batch_size", type=int, default=8, help="Batch size"
+        )
+        self.parser.add_argument(
+            "--training.gradient_accumulation_steps",
+            type=int,
+            default=1,
+            help="Interval in steps for gradient accumulation",
         )
         self.parser.add_argument(
             "--training.seq_len", type=int, default=2048, help="Sequence length"
@@ -210,6 +227,19 @@ class JobConfig:
             type=int,
             default=200,
             help="Steps for lr scheduler warmup, normally 1/5 of --training.steps",
+        )
+        self.parser.add_argument(
+                "--training.decay_steps",
+                type=Optional[int],
+                default=None,
+                help="Steps for lr scheduler decay, default is decay starts immediately after warmup",
+        )
+        self.parser.add_argument(
+                "--training.decay_type",
+                type=str,
+                default="linear",
+                choices = ["linear","cosine"],
+                help="Steps for lr scheduler decay type, defaults to linear",
         )
         self.parser.add_argument(
             "--training.max_norm",
@@ -583,7 +613,7 @@ class JobConfig:
         self.parser.add_argument(
             "--comm.trace_buf_size",
             type=int,
-            default=20000,
+            default=0,
             help="Flight recorder ring buffer size, >0 means recording by default, 0 means disabled",
         )
 
@@ -601,7 +631,29 @@ class JobConfig:
             action="store_true",
         )
 
+        self.parser.add_argument(
+            "--metrics.aim_hash",
+            type=Optional[str],
+            default=None,
+            help="The hash of the aim run to continue with",
+        )
+
+        self.parser.add_argument(
+            "--metrics.aim_experiment_name",
+            type=Optional[str],
+            default=None,
+        )
+        self.parser.add_argument(
+            "--logging.log_level",
+            default = "INFO",
+            choices=["INFO", "DEBUG", "WARNING", "ERROR", "CRITICAL"],
+            type=str,
+            help="Set the log level, INFO by default"
+        )
+
     def parse_args(self, args_list: list = sys.argv[1:]):
+        self.args_list = args_list
+
         args, cmd_args = self.parse_args_from_command_line(args_list)
         config_file = getattr(args, "job.config_file", None)
         # build up a two level dict
@@ -642,6 +694,7 @@ class JobConfig:
         assert self.model.name
         assert self.model.flavor
         assert self.model.tokenizer_path
+        validate_log_level(self.logging.log_level)
 
     def parse_args_from_command_line(
         self, args_list

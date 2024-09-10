@@ -1,5 +1,6 @@
 __pycache__
 .idea
+.vscode
 .DS_Store
 *.egg-info
 build
@@ -10,6 +11,7 @@ dist/*
 data
 out
 wandb
+aim
 
 torchtitan/datasets/**/*.model
 

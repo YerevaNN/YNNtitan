@@ -14,16 +14,8 @@ import torch.nn as nn
 from torch.distributed import DeviceMesh
 from torch.distributed._composable.fsdp import fully_shard, MixedPrecisionPolicy
 from torch.distributed._composable.replicate import replicate
-from torch.distributed._tensor import Replicate, Shard
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
     checkpoint_wrapper as ptd_checkpoint_wrapper,
-)
-from torch.distributed.tensor.parallel import (
-    ColwiseParallel,
-    parallelize_module,
-    PrepareModuleInput,
-    RowwiseParallel,
-    SequenceParallel,
 )
 
 from torchtitan.config_manager import JobConfig, TORCH_DTYPE_MAP
@@ -44,20 +36,6 @@ def parallelize_llama(
     NOTE: The passed-in model preferably should be on meta device. Otherwise,
     the model must fit on GPU or CPU memory.
     """
-
-    if parallel_dims.tp_enabled:
-        if (
-            job_config.experimental.enable_async_tensor_parallel
-            and not job_config.training.compile
-        ):
-            raise RuntimeError("Async TP requires --training.compile")
-        apply_tp(
-            model,
-            world_mesh["tp"],
-            loss_parallel=parallel_dims.loss_parallel_enabled,
-            enable_float8=job_config.float8.enable_float8_linear,
-            enable_async_tp=job_config.experimental.enable_async_tensor_parallel,
-        )
 
     if job_config.activation_checkpoint.mode != "none":
         apply_ac(model, job_config.activation_checkpoint)
@@ -83,7 +61,6 @@ def parallelize_llama(
                 reduce_dtype=TORCH_DTYPE_MAP[
                     job_config.training.mixed_precision_reduce
                 ],
-                pp_enabled=parallel_dims.pp_enabled,
             )
         else:
             if world_mesh.ndim > 1:
@@ -94,102 +71,6 @@ def parallelize_llama(
                 enable_compile=job_config.training.compile,
                 enable_compiled_autograd=job_config.experimental.enable_compiled_autograd,
             )
-
-
-def apply_tp(
-    model: nn.Module,
-    tp_mesh: DeviceMesh,
-    loss_parallel: bool,
-    enable_float8: bool,
-    enable_async_tp: bool,
-):
-    """Apply tensor parallelism."""
-    # 1. Parallelize the embedding and shard its outputs (which are the first
-    # transformer block's inputs)
-    # 2. Parallelize the root norm layer over the sequence dim
-    # 3. Parallelize the final linear output layer
-    parallelize_module(
-        model,
-        tp_mesh,
-        {
-            "tok_embeddings": RowwiseParallel(
-                input_layouts=Replicate(),
-                output_layouts=Shard(1),
-            ),
-            "norm": SequenceParallel(),
-            "output": ColwiseParallel(
-                input_layouts=Shard(1),
-                output_layouts=Shard(-1) if loss_parallel else Replicate(),
-                use_local_output=not loss_parallel,
-            ),
-        },
-    )
-
-    # Parallel styles used for transformer block linear weights and their
-    # inputs may be different for float8 linears
-    if enable_float8:
-        # TODO(vkuzo): once float8 configuration supports delayed scaling,
-        # add a check here to enforce supported float8 all-gather configurations
-        # TODO(vkuzo): add the items below to __init__.py of torchao.float8 and import from there
-        from torchao.float8.float8_tensor_parallel import (
-            Float8ColwiseParallel,
-            Float8RowwiseParallel,
-            PrepareFloat8ModuleInput,
-        )
-
-        rowwise_parallel, colwise_parallel, prepare_module_input = (
-            Float8RowwiseParallel,
-            Float8ColwiseParallel,
-            PrepareFloat8ModuleInput,
-        )
-    else:
-        rowwise_parallel, colwise_parallel, prepare_module_input = (
-            RowwiseParallel,
-            ColwiseParallel,
-            PrepareModuleInput,
-        )
-
-    # Apply tensor + sequence parallelism to every transformer block
-    # NOTE: At the cost of model code change, we can accelerate Sequence Parallel
-    #       by folding (and unfolding) the batch dimension and the sequence dimension.
-    #       Examples can be found at https://github.com/pytorch/torchtitan/pull/437
-    for layer_id, transformer_block in model.layers.items():
-        layer_plan = {
-            "attention_norm": SequenceParallel(),
-            "attention": prepare_module_input(
-                input_layouts=(Shard(1), None),
-                desired_input_layouts=(Replicate(), None),
-            ),
-            "attention.wq": colwise_parallel(),
-            "attention.wk": colwise_parallel(),
-            "attention.wv": colwise_parallel(),
-            "attention.wo": rowwise_parallel(output_layouts=Shard(1)),
-            "ffn_norm": SequenceParallel(),
-            "feed_forward": prepare_module_input(
-                input_layouts=(Shard(1),),
-                desired_input_layouts=(Replicate(),),
-            ),
-            "feed_forward.w1": colwise_parallel(),
-            "feed_forward.w2": rowwise_parallel(output_layouts=Shard(1)),
-            "feed_forward.w3": colwise_parallel(),
-        }
-
-        parallelize_module(
-            module=transformer_block,
-            device_mesh=tp_mesh,
-            parallelize_plan=layer_plan,
-        )
-
-    if enable_async_tp:
-        from torch.distributed._symmetric_memory import enable_symm_mem_for_group
-
-        torch._inductor.config._micro_pipeline_tp = True
-        enable_symm_mem_for_group(tp_mesh.get_group().group_name)
-
-    logger.info(
-        f"Applied {'Float8 ' if enable_float8 else ''}{'Async ' if enable_async_tp else ''}"
-        "Tensor Parallelism to the model"
-    )
 
 
 # for selective op activation checkpointing
@@ -289,7 +170,6 @@ def apply_fsdp(
     dp_mesh: DeviceMesh,
     param_dtype: torch.dtype,
     reduce_dtype: torch.dtype,
-    pp_enabled: bool,
 ):
     """
     Apply data parallelism to the model. FSDP2 is used here.
@@ -298,32 +178,17 @@ def apply_fsdp(
     fsdp_config = {"mesh": dp_mesh, "mp_policy": mp_policy}
 
     for layer_id, transformer_block in model.layers.items():
-        if pp_enabled:
-            # For PP, do not reshard after forward to avoid per-microbatch
-            # all-gathers, which can be expensive and non-overlapped
-            reshard_after_forward = False
-        else:
-            # As an optimization, do not reshard after forward for the last
-            # transformer block since FSDP would prefetch it immediately
-            reshard_after_forward = int(layer_id) < len(model.layers) - 1
+        # As an optimization, do not reshard after forward for the last
+        # transformer block since FSDP would prefetch it immediately
+        reshard_after_forward = int(layer_id) < len(model.layers) - 1
         fully_shard(
             transformer_block,
             **fsdp_config,
             reshard_after_forward=reshard_after_forward,
         )
-    fully_shard(model, **fsdp_config, reshard_after_forward=not pp_enabled)
-
-    if pp_enabled:
-        # TODO
-        # This PR https://github.com/pytorch/pytorch/pull/129519 added a safety check to avoid using 2D/3D DCP since
-        # without strided sharding, DCP can not safely support resharding for 2D/3D.  However, for PP to work, even
-        # without resharding, we load a seed-checkpoint and need to disable the safety mechanism.  This hack should be
-        # removed after strided sharding is landed in DCP.
-        for module in model.modules():
-            assert len(module._load_state_dict_pre_hooks) <= 1
-            module._load_state_dict_pre_hooks.clear()
-            assert len(module._state_dict_pre_hooks) <= 1
-            module._state_dict_pre_hooks.clear()
+    fully_shard(
+        model, **fsdp_config, reshard_after_forward=True
+    )  # in torch titan, this was "not pp_enabled"
 
     logger.info("Applied FSDP to the model")
 

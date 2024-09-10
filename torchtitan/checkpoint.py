@@ -48,6 +48,8 @@ class TrainState(Stateful):
     step: int = 0
     global_avg_losses: List[float] = field(default_factory=list)
     global_max_losses: List[float] = field(default_factory=list)
+    global_avg_perplexities: List[float] = field(default_factory=list)
+    global_max_perplexities: List[float] = field(default_factory=list)
     log_steps: List[int] = field(default_factory=list)
 
     def state_dict(self) -> Dict[str, Any]:
@@ -131,8 +133,8 @@ class SaveDone:
     pass
 
 
-def checkpoint_mp(recv, send):
-    init_logger()
+def checkpoint_mp(recv, send,log_level):
+    init_logger(log_level)
     os.environ["MASTER_PORT"] = str(int(os.environ["MASTER_PORT"]) + 2)
     os.environ["TORCHELASTIC_USE_AGENT_STORE"] = "False"
     torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
@@ -220,8 +222,9 @@ class CheckpointManager:
 
         self.states.update(
             {
-                "model": ModelWrapper(model),
-                "optimizer": OptimizerWrapper(model, optimizer),
+                "model": ModelWrapper(model_parts),
+                "optimizer": OptimizerWrapper(model_parts, optimizers),
+                "dataloader": dataloader,
             }
         )
         if len(lr_schedulers) == 1:
@@ -232,7 +235,8 @@ class CheckpointManager:
             for idx, lr_scheduler in enumerate(lr_schedulers):
                 self.states[f"lr_scheduler_{idx}"] = lr_scheduler
 
-        self.folder = os.path.join(job_config.job.dump_folder, ckpt_config.folder)
+        self.save_folder = os.path.join(job_config.job.dump_folder, ckpt_config.save_folder)
+        self.load_folder = os.path.join(job_config.job.dump_folder, ckpt_config.load_folder)
         self.interval_type = (
             IntervalType.SECONDS
             if ckpt_config.interval_type == "seconds"
@@ -264,6 +268,7 @@ class CheckpointManager:
                 args=(
                     self.mp_queue_send,
                     self.mp_queue_recv,
+                    job_config.logging.log_level
                 ),
                 daemon=True,
             )
@@ -277,7 +282,7 @@ class CheckpointManager:
             raise ValueError(f"Unkown checkpoint async_mode {ckpt_config.async_mode}")
 
         logger.info(
-            f"Checkpointing active. Checkpoints will be loaded from and saved to {self.folder}"
+            f"Checkpointing active. Checkpoints will be loaded from {self.load_folder} and saved to {self.save_folder}"
         )
 
     def __del__(self):
@@ -288,8 +293,8 @@ class CheckpointManager:
     def reset(self) -> None:
         self.begin_time = time.monotonic()
 
-    def _create_checkpoint_id(self, step: int) -> str:
-        return os.path.join(self.folder, f"step-{step}")
+    def _create_checkpoint_id(self, step: int, folder: str) -> str:
+        return os.path.join(folder, f"step-{step}")
 
     def _save_last_step(self, curr_step: int) -> None:
         # We only consider saving weights only at the end of the training. So
@@ -320,7 +325,7 @@ class CheckpointManager:
         else:
             logger.info(f"Saving a full checkpoint at last step, step {curr_step}.")
 
-        dcp.save(self.states, checkpoint_id=self._create_checkpoint_id(curr_step))
+        dcp.save(self.states, checkpoint_id=self._create_checkpoint_id(curr_step, self.save_folder))
         self.reset()
 
     def _should_save(self, curr_step: int, force: bool = False) -> bool:
@@ -408,7 +413,7 @@ class CheckpointManager:
             return
 
         begin = time.monotonic()
-        checkpoint_id = self._create_checkpoint_id(curr_step)
+        checkpoint_id = self._create_checkpoint_id(curr_step, self.save_folder)
         self._async_wait()
         if force:
             self._save_last_step(curr_step)
@@ -445,16 +450,16 @@ class CheckpointManager:
     def load(self, step: int = -1) -> bool:
         if not self.enable_checkpoint:
             return False
-        if not os.path.isdir(self.folder):
+        if not os.path.isdir(self.load_folder):
             return False
-        if step != -1 and not os.path.isdir(self._create_checkpoint_id(step)):
+        if step != -1 and not os.path.isdir(self._create_checkpoint_id(step, self.load_folder)):
             return False
 
         if step == -1:
             step_counts = []
-            for filename in os.listdir(self.folder):
+            for filename in os.listdir(self.load_folder):
                 match = re.search(r"step-(\d+)", filename)
-                metadata_probe = os.path.join(self.folder, filename, ".metadata")
+                metadata_probe = os.path.join(self.load_folder, filename, ".metadata")
                 if match and os.path.isfile(metadata_probe):
                     step_counts.append(int(match.group(1)))
             if not step_counts:
@@ -467,7 +472,7 @@ class CheckpointManager:
         begin = time.monotonic()
         dcp.load(
             states,
-            checkpoint_id=self._create_checkpoint_id(step),
+            checkpoint_id=self._create_checkpoint_id(step, self.load_folder),
         )
         logger.info(
             f"Finished loading the checkpoint in {time.monotonic() - begin:.2f} seconds."
@@ -477,9 +482,9 @@ class CheckpointManager:
     def _purge_stale_checkpoints(self):
         if self.keep_latest_k > 0:
             discovered_checkpoints = []
-            for filename in os.listdir(self.folder):
+            for filename in os.listdir(self.save_folder):
                 match = re.search(r"step-(\d+)", filename)
-                path = os.path.join(self.folder, filename)
+                path = os.path.join(self.save_folder, filename)
                 discovered_checkpoints.append((int(match.group(1)), path))
 
             discovered_checkpoints.sort()
