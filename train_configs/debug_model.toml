@@ -33,7 +33,7 @@ name = "AdamW"
 lr = 8e-4
 
 [training]
-batch_size = 1
+batch_size = 4
 gradient_accumulation_steps = 1
 seq_len = 2048
 warmup_steps = 2  # lr scheduler warm up, normally 20% of the train steps
@@ -45,7 +45,7 @@ compile = false
 dataset = "c4_test"  # supported datasets: c4_test (2K), c4 (177M)
 
 [validation]
-batch_size = 1
+batch_size = 4
 eval_freq = 3
 enable_val = true
 dataset = "c4_test"  # supported datasets: c4_test (2K), c4 (177M)
@@ -55,7 +55,7 @@ pipeline_parallel_degree = 1
 enable_async_tensor_parallel = false
 
 [checkpoint]
-enable_checkpoint = true
+enable_checkpoint = false
 save_folder = "checkpoint"
 load_folder = "checkpoint"
 create_seed_checkpoint = false

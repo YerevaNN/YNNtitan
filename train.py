@@ -104,6 +104,16 @@ def main(job_config: JobConfig):
 
     # validation batch size
     val_bs = job_config.validation.batch_size if job_config.validation.batch_size != 0 else job_config.metrics.batch_size
+    val_data_loader = build_hf_data_loader(
+        job_config.validation.dataset,
+        job_config.validation.dataset_path,
+        tokenizer,
+        val_bs,
+        job_config.training.seq_len,
+        dp_degree,
+        dp_rank,
+        False
+    )
 
     # build model (using meta init)
     model_cls = model_name_to_cls[model_name]
@@ -242,32 +252,46 @@ def main(job_config: JobConfig):
         job_config, global_step=train_state.step
     ) as memory_profiler:
         while train_state.step < job_config.training.steps:
+            logger.info(f"loop {train_state.step}")
             train_state.step += 1
             gc_handler.run(train_state.step)
-
             # get batch
             data_load_start = time.perf_counter()
+            logger.info(f"zgrad {train_state.step}")
             optimizers.zero_grad()
-
+            logger.info(f"after_0 {train_state.step}")
             for _ in range(job_config.training.gradient_accumulation_steps):
+                logger.info(f"before batch {train_state.step}")
+
                 batch = next(data_iterator)
+                logger.info(f"after batch {train_state.step}")
+
                 input_ids, labels = batch
-                ntokens_since_last_log += labels.numel()
+                logger.info(f"before move batch to cuda {train_state.step}")
+
+                # ntokens_since_last_log += labels.numel()
                 input_ids = input_ids.cuda()
                 labels = labels.cuda()
-                data_loading_times.append(time.perf_counter() - data_load_start)
+                # data_loading_times.append(time.perf_counter() - data_load_start)
+                logger.info(f"before model forward {train_state.step}")
+
 
                 with train_context():
                     pred = model(input_ids)
                     loss = loss_fn(pred, labels)
+                    logger.info(f"after loss {train_state.step}")
+
                     # pred.shape=(bs, seq_len, vocab_size)
                     # need to free to before bwd to avoid peaking memory
                     del pred
                     loss.backward()
+            logger.info(f"after_loop {train_state.step}")
+            
             for m in model_parts:
                 torch.nn.utils.clip_grad_norm_(
                     m.parameters(), job_config.training.max_norm, foreach=True
                 )
+            logger.info(f"clip {train_state.step}")
 
             # sync float8 amaxes and scales
             float8_handler.sync_float8_amax_and_scale_history(model_parts)
@@ -276,147 +300,160 @@ def main(job_config: JobConfig):
             # optimizer step
             optimizers.step()
             lr_schedulers.step()
+            logger.info(f"step {train_state.step}")
 
             # calculate float8 dynamic amax/scale for all-parameter for FSDP2
             # it issues a single all-reduce for all parameters at once for better performance
             float8_handler.precompute_float8_dynamic_scale_for_fsdp(model_parts)
+            logger.info(f"float {train_state.step}")
 
             losses_since_last_log.append(loss)
 
             # log train metrics
-            if (
-                train_state.step == 1
-                or train_state.step % job_config.metrics.log_freq == 0
-            ):
-                losses = [loss.item() for loss in losses_since_last_log]
+            # if (
+            #     train_state.step == 1
+            #     or train_state.step % job_config.metrics.log_freq == 0
+            # ):
+                
+            #     losses = [loss.item() for loss in losses_since_last_log]
 
-                perplexities = [2 ** loss.item() for loss in losses_since_last_log]
+            #     perplexities = [2 ** loss.item() for loss in losses_since_last_log]
 
-                avg_loss, max_loss = sum(losses) / len(losses), max(losses)
-                avg_perplexity, max_perplexity = sum(perplexities) / len(perplexities), max(perplexities)
+            #     avg_loss, max_loss = sum(losses) / len(losses), max(losses)
+            #     avg_perplexity, max_perplexity = sum(perplexities) / len(perplexities), max(perplexities)
+            #     logger.info("float")
 
-                if parallel_dims.dp_enabled:
-                    global_avg_loss, global_max_loss = (
-                        utils.dist_mean(avg_loss, dp_mesh),
-                        utils.dist_max(max_loss, dp_mesh),
-                    )
-                    global_avg_perplexity, global_max_perplexity = (
-                        utils.dist_mean(avg_perplexity, dp_mesh),
-                        utils.dist_max(max_perplexity, dp_mesh),
-                    )
-                else:
-                    global_avg_loss, global_max_loss = avg_loss, max_loss
-                    global_avg_perplexity, global_max_perplexity = avg_perplexity, max_perplexity
+            #     if parallel_dims.dp_enabled:
+            #         global_avg_loss, global_max_loss = (
+            #             utils.dist_mean(avg_loss, dp_mesh),
+            #             utils.dist_max(max_loss, dp_mesh),
+            #         )
+            #         global_avg_perplexity, global_max_perplexity = (
+            #             utils.dist_mean(avg_perplexity, dp_mesh),
+            #             utils.dist_max(max_perplexity, dp_mesh),
+            #         )
+            #     else:
+            #         global_avg_loss, global_max_loss = avg_loss, max_loss
+            #         global_avg_perplexity, global_max_perplexity = avg_perplexity, max_perplexity
 
-                # update train state
-                train_state.log_steps.append(train_state.step)
-                train_state.global_avg_losses.append(global_avg_loss)
-                train_state.global_max_losses.append(global_max_loss)
-                train_state.global_avg_perplexities.append(global_avg_perplexity)
-                train_state.global_max_perplexities.append(global_max_perplexity)
+            #     # update train state
+            #     train_state.log_steps.append(train_state.step)
+            #     train_state.global_avg_losses.append(global_avg_loss)
+            #     train_state.global_max_losses.append(global_max_loss)
+            #     train_state.global_avg_perplexities.append(global_avg_perplexity)
+            #     train_state.global_max_perplexities.append(global_max_perplexity)
 
-                time_delta = time.perf_counter() - time_last_log
+            #     time_delta = time.perf_counter() - time_last_log
 
-                # tokens per second, abbr. as wps by convention
-                wps = ntokens_since_last_log / (
-                    time_delta * parallel_dims.model_parallel_size
-                )
-                # model FLOPS utilization
-                # For its definition and calculation, please refer to the PaLM paper:
-                # https://arxiv.org/abs/2204.02311
-                mfu = 100 * num_flop_per_token * wps / gpu_peak_flops
+            #     # tokens per second, abbr. as wps by convention
+            #     wps = ntokens_since_last_log / (
+            #         time_delta * parallel_dims.model_parallel_size
+            #     )
+            #     # model FLOPS utilization
+            #     # For its definition and calculation, please refer to the PaLM paper:
+            #     # https://arxiv.org/abs/2204.02311
+            #     mfu = 100 * num_flop_per_token * wps / gpu_peak_flops
 
-                time_end_to_end = time_delta / job_config.metrics.log_freq
-                time_data_loading = sum(data_loading_times) / len(data_loading_times)
-                time_data_loading_pct = 100 * sum(data_loading_times) / time_delta
+            #     time_end_to_end = time_delta / job_config.metrics.log_freq
+            #     time_data_loading = sum(data_loading_times) / len(data_loading_times)
+            #     time_data_loading_pct = 100 * sum(data_loading_times) / time_delta
 
-                gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
+            #     gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
 
-                metrics = {
-                    "train/loss_metrics/global_avg_loss": global_avg_loss,
-                    "train/loss_metrics/global_max_loss": global_max_loss,
-                    "train/loss_metrics/global_avg_perplexity": global_avg_perplexity,
-                    "train/loss_metrics/global_max_perplexity": global_max_perplexity,
-                    "train/wps": wps,
-                    "train/mfu(%)": mfu,
-                    "train/time_metrics/end_to_end(s)": time_end_to_end,
-                    "train/time_metrics/data_loading(s)": time_data_loading,
-                    "train/time_metrics/data_loading(%)": time_data_loading_pct,
-                    "train/memory/max_active(GiB)": gpu_mem_stats.max_active_gib,
-                    "train/memory/max_active(%)": gpu_mem_stats.max_active_pct,
-                    "train/memory/max_reserved(GiB)": gpu_mem_stats.max_reserved_gib,
-                    "train/memory/max_reserved(%)": gpu_mem_stats.max_reserved_pct,
-                    "train/memory/num_alloc_retries": gpu_mem_stats.num_alloc_retries,
-                    "train/memory/num_ooms": gpu_mem_stats.num_ooms,
-                }
-                metric_logger.log(metrics, step=train_state.step)
+            #     metrics = {
+            #         "train/loss_metrics/global_avg_loss": global_avg_loss,
+            #         "train/loss_metrics/global_max_loss": global_max_loss,
+            #         "train/loss_metrics/global_avg_perplexity": global_avg_perplexity,
+            #         "train/loss_metrics/global_max_perplexity": global_max_perplexity,
+            #         "train/wps": wps,
+            #         "train/mfu(%)": mfu,
+            #         "train/time_metrics/end_to_end(s)": time_end_to_end,
+            #         "train/time_metrics/data_loading(s)": time_data_loading,
+            #         "train/time_metrics/data_loading(%)": time_data_loading_pct,
+            #         "train/memory/max_active(GiB)": gpu_mem_stats.max_active_gib,
+            #         "train/memory/max_active(%)": gpu_mem_stats.max_active_pct,
+            #         "train/memory/max_reserved(GiB)": gpu_mem_stats.max_reserved_gib,
+            #         "train/memory/max_reserved(%)": gpu_mem_stats.max_reserved_pct,
+            #         "train/memory/num_alloc_retries": gpu_mem_stats.num_alloc_retries,
+            #         "train/memory/num_ooms": gpu_mem_stats.num_ooms,
+            #     }
+            #     metric_logger.log(metrics, step=train_state.step)
 
-                logger.info(
-                    "context: train  "
-                    f"{color.cyan}step: {train_state.step:2}  "
-                    f"{color.green}loss: {global_avg_loss:7.4f}  "
-                    f"{color.yellow}memory: {gpu_mem_stats.max_reserved_gib:5.2f}GiB"
-                    f"({gpu_mem_stats.max_reserved_pct:.2f}%)  "
-                    f"{color.blue}wps: {round(wps):,}  "
-                    f"{color.magenta}mfu: {mfu:.2f}%{color.reset}"
-                )
+            #     logger.info(
+            #         "context: train  "
+            #         f"{color.cyan}step: {train_state.step:2}  "
+            #         f"{color.green}loss: {global_avg_loss:7.4f}  "
+            #         f"{color.yellow}memory: {gpu_mem_stats.max_reserved_gib:5.2f}GiB"
+            #         f"({gpu_mem_stats.max_reserved_pct:.2f}%)  "
+            #         f"{color.blue}wps: {round(wps):,}  "
+            #         f"{color.magenta}mfu: {mfu:.2f}%{color.reset}"
+            #     )
 
-                losses_since_last_log.clear()
-                ntokens_since_last_log = 0
-                data_loading_times.clear()
-                time_last_log = time.perf_counter()
-                gpu_memory_monitor.reset_peak_stats()
+            #     losses_since_last_log.clear()
+            #     ntokens_since_last_log = 0
+            #     data_loading_times.clear()
+            #     time_last_log = time.perf_counter()
+            #     gpu_memory_monitor.reset_peak_stats()
 
             # log val metrics
             if (
                 job_config.validation.enable_val
-                and train_state.step == 1
-                or train_state.step % job_config.validation.eval_freq == 0
+                and (train_state.step == 0
+                or train_state.step % job_config.validation.eval_freq == 0)
             ):
-                with torch.no_grad():
-                    model.eval()
-                    val_data_loader = build_hf_data_loader(
-                        job_config.validation.dataset,
-                        job_config.validation.dataset_path,
-                        tokenizer,
-                        val_bs,
-                        job_config.training.seq_len,
-                        dp_degree,
-                        dp_rank,
-                        False
-                    )
-                    num_flop_per_token_val = utils.get_num_flop_per_token_forward(
-                        utils.get_num_params(model, exclude_embedding=True),
-                        model_config,
-                        job_config.training.seq_len,
-                    )
-                    validate(
-                        model,
-                        val_data_loader,
-                        eval_state,
-                        logger,
-                        metric_logger,
-                        parallel_dims, 
-                        gpu_memory_monitor,
-                        data_loading_times,
-                        time_last_val_log,
-                        job_config.validation.eval_freq, 
-                        color,
-                        train_state.step,
-                        num_flop_per_token_val,
-                        gpu_peak_flops
-                    )
+                # with torch.no_grad():
+                model.eval()
+                # val_data_loader = build_hf_data_loader(
+                #     job_config.validation.dataset,
+                #     job_config.validation.dataset_path,
+                #     tokenizer,
+                #     val_bs,
+                #     job_config.training.seq_len,
+                #     dp_degree,
+                #     dp_rank,
+                #     False
+                # )
+                num_flop_per_token_val = utils.get_num_flop_per_token_forward(
+                    utils.get_num_params(model, exclude_embedding=True),
+                    model_config,
+                    job_config.training.seq_len,
+                )
+                validate(
+                    model,
+                    val_data_loader,
+                    eval_state,
+                    logger,
+                    metric_logger,
+                    parallel_dims, 
+                    gc_handler,
+                    # dp_mesh,
+                    train_context,
+                    gpu_memory_monitor,
+                    data_loading_times,
+                    time_last_val_log,
+                    job_config.validation.eval_freq, 
+                    color,
+                    train_state.step,
+                    num_flop_per_token_val,
+                    gpu_peak_flops
+                )
+                logger.info("bar {train_state.step}")
+                    # torch.distributed.barrier()
                 model.train()
+                logger.info("bbar {train_state.step}")
+
 
             checkpoint.save(
                 train_state.step, force=(train_state.step == job_config.training.steps)
             )
+            logger.info(f"HIcheck {train_state.step}")
 
             # signal the profiler that the next profiling step has started
             if torch_profiler:
                 torch_profiler.step()
             if memory_profiler:
                 memory_profiler.step()
+            logger.info("HIprof")
 
             # reduce timeout after first train step for faster signal
             # (assuming lazy init and compilation are finished)
@@ -425,6 +462,8 @@ def main(job_config: JobConfig):
                     timeout=timedelta(seconds=job_config.comm.train_timeout_seconds),
                     world_mesh=world_mesh,
                 )
+            logger.info("HI")
+
 
     if torch.distributed.get_rank() == 0:
         logger.info("Sleeping 2 seconds for other ranks to complete")
