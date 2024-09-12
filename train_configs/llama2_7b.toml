@@ -35,6 +35,21 @@ tensor_parallel_degree = 1  # dp-only would be sufficient for 7B
 compile = false
 dataset = "c4"
 
+[dataset]
+use_experimental_dataloader = false
+data_logical_shards = 768
+bos_token = 0
+eos_token = 1
+# dataset_path = "/fsx/datasets/"
+# datasets = "CommonCrawl,C4,Github,Wikipedia,Books,ArXiv,StackExchange"
+# dataset_weights = "67,15,4.5,4.5,4.5,2.5,2"
+dataset_path = "./torchtitan/datasets/experimental/llama2"
+datasets = "c4_mini"
+dataset_weights = "1"
+num_data_workers = 1
+col_name = "tokens"
+file_type = "arrow"
+
 [experimental]
 pipeline_parallel_degree = 1
 

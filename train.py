@@ -11,12 +11,12 @@ from datetime import timedelta
 
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
-from torch.fx import GraphModule
 
+from torchtitan.config_manager import JobConfig
+from torchtitan.datasets import build_experimental_data_loader, build_hf_data_loader 
+from torch.fx import GraphModule
 from torchtitan.utils import common_utils as utils
 from torchtitan.checkpoint import CheckpointManager, TrainState
-from torchtitan.config_manager import JobConfig
-from torchtitan.datasets import build_hf_data_loader
 from torchtitan.tokenizers.tokenizer import build_tokenizer
 from torchtitan.float8 import Float8Handler
 from torchtitan.logging import init_logger, logger
@@ -87,21 +87,30 @@ def main(job_config: JobConfig):
     world_mesh = parallel_dims.build_mesh(device_type="cuda")
     init_device = "cpu" if job_config.checkpoint.create_seed_checkpoint else "cuda"
 
+    model_name = job_config.model.name
+
     # build tokenizer
     tokenizer_type = model_name_to_tokenizer[model_name]
     tokenizer = build_tokenizer(tokenizer_type, job_config.model.tokenizer_path)
 
     # build dataloader
-    data_loader = build_hf_data_loader(
-        job_config.training.dataset,
-        job_config.training.dataset_path,
-        job_config.training.data_processing_style,
-        tokenizer,
-        job_config.training.batch_size,
-        job_config.training.seq_len,
-        dp_degree,
-        dp_rank,
-    )
+    if job_config.dataset.use_experimental_dataloader:
+        data_loader = build_experimental_data_loader(
+            job_config,
+            dp_rank,
+            dp_degree,
+            tokenizer,
+        )
+    else:
+        data_loader = build_hf_data_loader(
+            job_config.training.dataset,
+            job_config.training.dataset_path,
+            tokenizer,
+            job_config.training.batch_size,
+            job_config.training.seq_len,
+            dp_degree,
+            dp_rank,
+        )
 
     # build model (using meta init)
     model_cls = model_name_to_cls[model_name]

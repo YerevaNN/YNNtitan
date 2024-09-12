@@ -385,6 +385,67 @@ class JobConfig:
             help="Python garbage control scheduling interval, in steps",
         )
 
+        # experimental dataloader flags
+        self.parser.add_argument(
+            "--dataset.use_experimental_dataloader",
+            action="store_true",
+            help="Whether to use the experimental dataloader instead of default HF",
+        )
+        self.parser.add_argument(
+            "--dataset.data_logical_shards",
+            type=int,
+            default=768,
+            help="Dataloader logical shards. All divisors are possible world sizes.",
+        )
+        self.parser.add_argument(
+            "--dataset.bos_token",
+            type=int,
+            default=-1,
+            help="BOS token index value. If not using, leave as -1.",
+        )
+        self.parser.add_argument(
+            "--dataset.eos_token",
+            type=int,
+            default=0,
+            help="EOS or SEP token index value.",
+        )
+        self.parser.add_argument(
+            "--dataset.drop_tokens",
+            type=str,
+            default="",
+            help="Dummy token values to drop from begin/end of sequences (comma-separated ints)",
+        )
+        self.parser.add_argument(
+            "--dataset.datasets",
+            type=str,
+            default="c4_mini",
+            help="Datasets to use for training, comma-separated",
+        )
+        self.parser.add_argument(
+            "--dataset.dataset_weights",
+            type=str,
+            default="1",
+            help="Sampling ratios for sub-datasets, comma-separated. Do not need to sum to 1.",
+        )
+        self.parser.add_argument(
+            "--dataset.num_data_workers",
+            type=int,
+            default=1,
+            help="Number of parallel dataloader processes per device.",
+        )
+        self.parser.add_argument(
+            "--dataset.file_type",
+            type=str,
+            default="arrow",
+            help="Shard file format. Current options are pretokenized 'arrow' and raw text 'hf_parquet'.",
+        )
+        self.parser.add_argument(
+            "--dataset.col_name",
+            type=str,
+            default="tokens",
+            help="Which column/field of the file shard contains the readable data.",
+        )
+
         # checkpointing configs
         self.parser.add_argument(
             "--checkpoint.enable_checkpoint",
