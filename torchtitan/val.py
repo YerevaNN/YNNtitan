@@ -38,9 +38,9 @@ def validate(
     eval_state.step = 0
     val_data_iterator = iter(data_loader)
     while True:
-        batch = next(val_data_iterator,None)
         if fin_val_store.num_keys() > 1:
             batch = None
+        batch = next(val_data_iterator,None)
         if not batch:
             fin_val_store.set(str(dp_rank),"valfin")
             logger.info("plan to exit")
@@ -60,6 +60,7 @@ def validate(
         with train_context():
             with torch.no_grad():
                 if fin_val_store.num_keys() > 1:
+                    logger.info("skipping")
                     continue
                 else:
                     pred = model(input_ids)

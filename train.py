@@ -416,7 +416,6 @@ def main(job_config: JobConfig):
                 data_loading_times.clear()
                 time_last_log = time.perf_counter()
                 gpu_memory_monitor.reset_peak_stats()
-            store_file_path = f"/tmp/rankstore_val_chemlactica_train_mini_{train_state.step}"
             fin_val_path = f"/tmp/rankstore_outer_{train_state.step}"
 
             # log val metrics
@@ -426,7 +425,6 @@ def main(job_config: JobConfig):
                 or train_state.step % job_config.validation.eval_freq == 0)
             ):
 
-                data_completion_store = create_fresh_file_store(store_file_path,world_size)
                 fin_val_store = create_fresh_file_store(fin_val_path,world_size)
 
                 val_data_loader = build_hf_data_loader(
@@ -443,7 +441,6 @@ def main(job_config: JobConfig):
                     num_workers = job_config.dataloader.num_workers,
                     special_mode = job_config.dataloader.special_mode,
                     context = "val",
-                    store = data_completion_store,
                 )
                 num_flop_per_token_val = utils.get_num_flop_per_token_forward(
                     utils.get_num_params(model, exclude_embedding=True),
@@ -474,7 +471,6 @@ def main(job_config: JobConfig):
 
                 logger.info("bar {train_state.step}")
                     # torch.distributed.barrier()
-                del data_completion_store
                 gc.collect()
                 logger.info("bbar {train_state.step}")
                 del fin_val_store

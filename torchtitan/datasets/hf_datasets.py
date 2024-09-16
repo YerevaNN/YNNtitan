@@ -88,7 +88,6 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         rank: int = 0,
         infinite: bool = False,
         special_mode = None,
-        store = None,
     ) -> None:
         # allow user to pass in a (local or HF hub) path to use unsupported datasets
         if dataset_name not in _supported_datasets:
@@ -130,13 +129,6 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         self.world_size = world_size
         self.should_iterate = True
 
-        # for non sync communication between ranks
-        if not self.infinite and store:
-            self.store = store
-        else:
-            self.store = None
-    
-
         # variables for checkpointing
         self._sample_idx = 0
         self._all_tokens: List[int] = []
@@ -147,19 +139,13 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         # debugging dataloader yielding
         self.special_mode = str(special_mode)
 
-    def _some_rank_finished(self) -> bool:
-        if not self.infinite and self.store.num_keys() > 1: # one key used for coordination, more than one means one of the ranks exhausted data
-            return True
-        else:
-            return False
-
     def __iter__(self):
         max_buffer_token_len = 1 + self.seq_len
 
         while True:
             if not self.should_iterate:
-                logger.info("not iterating more outer")
                 return []
+
             if self.special_mode == "yield_tensor":
                 logger.info("yielding tensor")
                 yield random_tensor, random_tensor
@@ -167,12 +153,6 @@ class HuggingFaceDataset(IterableDataset, Stateful):
                 continue
 
             for sample_json in self._get_data_iter():
-                if self._some_rank_finished():
-                    logger.info("not iterating more, checked store")
-                    self.should_iterate = False
-                    break
-                if not self.should_iterate:
-                    return []
                 sample_text = self.data_processing_fn(sample_json, self.rng)
                 sample_tokens = self._tokenizer.encode(sample_text, bos=True, eos=True)
                 self._all_tokens.extend(sample_tokens)
@@ -184,18 +164,10 @@ class HuggingFaceDataset(IterableDataset, Stateful):
                     self._all_tokens = self._all_tokens[max_buffer_token_len:]
                     input = x[:-1]
                     label = x[1:]
-                    if not self.should_iterate:
-                        logger.info("not iterating more in yield else")
-                        return []
-                    else:
-                        yield input, label
+                    yield input, label
 
             if not self.infinite:
-                self.store.set(str(self.rank),"Done")
                 logger.warning(f"Dataset {self.dataset_name} has run out of data")
-                processes = [str(k) for k in range(self.world_size)]
-                self.store.wait(processes) # making sure all ranks get to this point
-                logger.info("other side of wait")
                 self.should_iterate = False
                 return []
                 break
@@ -270,11 +242,10 @@ def build_hf_data_loader(
     num_workers: int = 0,
     special_mode = None,
     context = "train",
-    store = None,
 ):
 
     hf_ds = HuggingFaceDataset(
-        dataset_name, dataset_path, data_processing_style, tokenizer, seq_len, world_size, rank, infinite, special_mode,store = store
+        dataset_name, dataset_path, data_processing_style, tokenizer, seq_len, world_size, rank, infinite, special_mode
     )
 
     return DPAwareDataLoader(rank, hf_ds, batch_size=batch_size, pin_memory=pin_memory, num_workers=num_workers)
