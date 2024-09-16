@@ -83,7 +83,7 @@ class AimLogger():
                 name = name[len(self._val_metric_prefix) :]
             self.experiment.track(v, name=name, step=step, context=context)
 
-    def finalize(self, status: str = '') -> None:
+    def finalize(self) -> None:
         if self._run:
             self._run.close()
             del self._run

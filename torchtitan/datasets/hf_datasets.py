@@ -7,6 +7,8 @@
 import pickle
 from typing import Any, Dict, List, Optional
 
+import numpy as np
+
 import torch
 from torch.distributed.checkpoint.stateful import Stateful
 from torch.utils.data import IterableDataset
@@ -21,6 +23,7 @@ except ImportError as e:
 
 from torchtitan.tokenizers.tokenizer import Tokenizer
 from torchtitan.logging import logger
+from torchtitan.utils.dataset_utils import chemlactica_style_data_processing,create_fresh_file_store
 
 from datasets import load_dataset
 from datasets.distributed import split_dataset_by_node
@@ -30,6 +33,11 @@ from datasets.distributed import split_dataset_by_node
 _supported_datasets = {
     "c4_test": "test/assets/c4_test",
     "c4": "allenai/c4",
+    "chemlactica_train_mini": "test/assets/chemlactica_train_mini"
+}
+
+_supported_data_processing_styles = {
+    "chemlactica_style": chemlactica_style_data_processing
 }
 
 
@@ -41,6 +49,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         dataset_path (Optional[str]):
             Path to the dataset in the file system. If provided, data will be loaded
             from this path instead of downloaded.
+        data_processing_style (str): name of the data process style    
         tokenizer (Tokenizer):
             Tokenizer used to encode data. Tokenize must implement an `encode` and `decode` method.
         seq_len (int): max sequence length
@@ -62,7 +71,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
     }
 
     Example use (c4):
-    >>> ds = HuggingFaceDataset(dataset_name="c4", dataset_path=None, tokenizer=tokenizer)
+    >>> ds = HuggingFaceDataset(dataset_name="c4", dataset_path=None, data_processing_style="chemlactica_style", tokenizer=tokenizer)
     >>> for batch in Dataloader(ds, batch_size=8):
             print(f"Batch size: {len(batch)}")
         Batch size: 8
@@ -72,11 +81,14 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         self,
         dataset_name: str,
         dataset_path: Optional[str],
+        data_processing_style: str,
         tokenizer: Tokenizer,
         seq_len: int = 2048,
         world_size: int = 1,
         rank: int = 0,
         infinite: bool = False,
+        special_mode = None,
+        store = None,
     ) -> None:
         # allow user to pass in a (local or HF hub) path to use unsupported datasets
         if dataset_name not in _supported_datasets:
@@ -102,23 +114,66 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         else:
             ds = load_dataset(dataset_path, split="train")
 
+        try:
+            data_processing_fn = _supported_data_processing_styles[data_processing_style]
+        except KeyError as e:
+            raise ValueError(f"Unsupported data processing style: {data_processing_style}")
+
         # TODO: support shuffling and checkpointing
         self.dataset_name = dataset_name
         self._data = split_dataset_by_node(ds, rank, world_size)
+        self.data_processing_fn = data_processing_fn
         self._tokenizer = tokenizer
         self.seq_len = seq_len
         self.infinite = infinite
+        self.rank = rank
+        self.world_size = world_size
+        self.should_iterate = True
+
+        # for non sync communication between ranks
+        if not self.infinite and store:
+            self.store = store
+        else:
+            self.store = None
+    
 
         # variables for checkpointing
         self._sample_idx = 0
         self._all_tokens: List[int] = []
 
+        # random number generator
+        self.rng = np.random.default_rng()
+
+        # debugging dataloader yielding
+        self.special_mode = str(special_mode)
+
+    def _some_rank_finished(self) -> bool:
+        if not self.infinite and self.store.num_keys() > 1: # one key used for coordination, more than one means one of the ranks exhausted data
+            return True
+        else:
+            return False
+
     def __iter__(self):
         max_buffer_token_len = 1 + self.seq_len
 
         while True:
-            for sample in self._get_data_iter():
-                sample_text = sample["text"]
+            if not self.should_iterate:
+                logger.info("not iterating more outer")
+                return []
+            if self.special_mode == "yield_tensor":
+                logger.info("yielding tensor")
+                yield random_tensor, random_tensor
+                random_tensor = torch.randint(low=1, high=2, size=(self.seq_len,))
+                continue
+
+            for sample_json in self._get_data_iter():
+                if self._some_rank_finished():
+                    logger.info("not iterating more, checked store")
+                    self.should_iterate = False
+                    break
+                if not self.should_iterate:
+                    return []
+                sample_text = self.data_processing_fn(sample_json, self.rng)
                 sample_tokens = self._tokenizer.encode(sample_text, bos=True, eos=True)
                 self._all_tokens.extend(sample_tokens)
                 self._sample_idx += 1
@@ -129,10 +184,20 @@ class HuggingFaceDataset(IterableDataset, Stateful):
                     self._all_tokens = self._all_tokens[max_buffer_token_len:]
                     input = x[:-1]
                     label = x[1:]
-                    yield input, label
+                    if not self.should_iterate:
+                        logger.info("not iterating more in yield else")
+                        return []
+                    else:
+                        yield input, label
 
             if not self.infinite:
+                self.store.set(str(self.rank),"Done")
                 logger.warning(f"Dataset {self.dataset_name} has run out of data")
+                processes = [str(k) for k in range(self.world_size)]
+                self.store.wait(processes) # making sure all ranks get to this point
+                logger.info("other side of wait")
+                self.should_iterate = False
+                return []
                 break
             else:
                 # Reset offset for the next iteration
@@ -169,7 +234,7 @@ class DPAwareDataLoader(StatefulDataLoader, Stateful):
     A wrapper around the StatefulDataLoader that ensures that the state is stored only once per DP rank.
     """
 
-    def __init__(self, dp_rank: int, hf_ds: IterableDataset, batch_size: int):
+    def __init__(self, dp_rank: int, hf_ds: IterableDataset, batch_size: int, pin_memory: bool, num_workers: int):
         super().__init__(hf_ds, batch_size)
         self._dp_rank = dp_rank
         self._rank_id = f"dp_rank_{dp_rank}"
@@ -194,15 +259,22 @@ class DPAwareDataLoader(StatefulDataLoader, Stateful):
 def build_hf_data_loader(
     dataset_name: str,
     dataset_path: Optional[str],
+    data_processing_style: str,
     tokenizer: Tokenizer,
     batch_size: int,
     seq_len: int,
     world_size,
     rank,
     infinite: bool = True,
+    pin_memory: bool = False,
+    num_workers: int = 0,
+    special_mode = None,
+    context = "train",
+    store = None,
 ):
+
     hf_ds = HuggingFaceDataset(
-        dataset_name, dataset_path, tokenizer, seq_len, world_size, rank, infinite
+        dataset_name, dataset_path, data_processing_style, tokenizer, seq_len, world_size, rank, infinite, special_mode,store = store
     )
 
-    return DPAwareDataLoader(rank, hf_ds, batch_size=batch_size)
+    return DPAwareDataLoader(rank, hf_ds, batch_size=batch_size, pin_memory=pin_memory, num_workers=num_workers)

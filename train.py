@@ -8,12 +8,15 @@ import contextlib
 import os
 import time
 from datetime import timedelta
+from pathlib import Path
+import gc
 
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
 from torch.fx import GraphModule
 
-from torchtitan import utils
+from torchtitan.utils import common_utils as utils
+from torchtitan.utils.dataset_utils import create_fresh_file_store
 from torchtitan.checkpoint import CheckpointManager, TrainState
 from torchtitan.config_manager import JobConfig
 from torchtitan.datasets import build_hf_data_loader
@@ -23,7 +26,8 @@ from torchtitan.logging import init_logger, logger
 from torchtitan.metrics import build_gpu_memory_monitor, build_metric_logger
 from torchtitan.models import (
     model_name_to_cls,
-    model_name_to_weights_loading_fns,
+    model_name_to_weights_download_fns,
+    model_name_to_weights_export_fns,
     model_name_to_tokenizer,
     models_config
 )
@@ -51,7 +55,7 @@ def get_train_context(enable_loss_parallel: bool, enable_compiled_autograd: bool
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
 def main(job_config: JobConfig):
-    init_logger()
+    init_logger(job_config.logging.log_level)
     logger.info(f"Starting job: {job_config.job.description}")
 
     # used for colorful printing
@@ -95,25 +99,21 @@ def main(job_config: JobConfig):
     data_loader = build_hf_data_loader(
         job_config.training.dataset,
         job_config.training.dataset_path,
+        job_config.training.data_processing_style,
         tokenizer,
         job_config.training.batch_size,
         job_config.training.seq_len,
         dp_degree,
-        dp_rank
+        dp_rank,
+        pin_memory = job_config.dataloader.pin_memory,
+        num_workers = job_config.dataloader.num_workers,
+        special_mode = job_config.dataloader.special_mode,
     )
+
 
     # validation batch size
     val_bs = job_config.validation.batch_size if job_config.validation.batch_size != 0 else job_config.metrics.batch_size
-    val_data_loader = build_hf_data_loader(
-        job_config.validation.dataset,
-        job_config.validation.dataset_path,
-        tokenizer,
-        val_bs,
-        job_config.training.seq_len,
-        dp_degree,
-        dp_rank,
-        False
-    )
+    
 
     # build model (using meta init)
     model_cls = model_name_to_cls[model_name]
@@ -123,8 +123,7 @@ def main(job_config: JobConfig):
     # 2. vocab size from tokenizer
     # 3. max_seq_len base on inputs
     model_config.norm_type = job_config.model.norm_type
-    model_config.vocab_size = tokenizer.n_words
-    model_config.vocab_size = 50000
+    model_config.vocab_size = tokenizer.padded_n_words
     model_config.max_seq_len = job_config.training.seq_len
 
     logger.info(f"Building {model_name} {job_config.model.flavor} with {model_config}")
@@ -132,14 +131,15 @@ def main(job_config: JobConfig):
         model = model_cls.from_model_args(model_config)
 
     # load the model on rank 0 only, then FSDP will distribute the weights
-    if job_config.checkpoint.create_seed_checkpoint:
+    if job_config.model_download_export.to_titan:
         assert (
             world_size == 1
         ), "Must create seed-checkpoint using one gpu, to disable sharding"
         model.to_empty(device=init_device)
-        model_name_to_weights_loading_fns[model_name](
+        model_name_to_weights_download_fns[model_name](
             model, weights_path=job_config.checkpoint.load_folder,
-            source=job_config.checkpoint.weights_source
+            source=job_config.model_download_export.weights_source,
+            token_embedding_size=model_config.vocab_size
         )
 
     # a no-op hander if float8 is not enabled
@@ -170,14 +170,15 @@ def main(job_config: JobConfig):
     models_parallelize_fns[model_name](model, world_mesh, parallel_dims, job_config)
 
     # move sharded model to CPU/GPU and initialize weights via DTensor
-    model.to_empty(device=init_device)
+    if not job_config.model_download_export.to_titan:
+        model.to_empty(device=init_device)
     model_parts = [model]
 
     for mod in model_parts:
         # skip traced modules since we do not define init_weights in the traced module
         if isinstance(mod, GraphModule):
             continue
-        if not job_config.checkpoint.create_seed_checkpoint:
+        if not job_config.model_download_export.to_titan:
             mod.init_weights()
         mod.train()
 
@@ -205,15 +206,27 @@ def main(job_config: JobConfig):
         job_config=job_config,
     )
 
-    if job_config.checkpoint.create_seed_checkpoint:
+    if job_config.model_download_export.to_titan:
         assert (
             world_size == 1
         ), "Must create seed-checkpoint using one gpu, to disable sharding"
         checkpoint.save(curr_step=0, force=True)
-        logger.info("Created seed checkpoint")
+        logger.info("Created titan checkpoint")
         return
 
     checkpoint_loaded = checkpoint.load()
+
+    if job_config.model_download_export.to_hf:
+        assert (
+            world_size == 1
+        ), "Must create seed-checkpoint using one gpu, to disable sharding"
+        model_name_to_weights_export_fns[model_name](
+            model,
+            save_dir=os.path.join(job_config.job.dump_folder, job_config.checkpoint.save_folder),
+            token_embedding_size=model_config.vocab_size
+        )
+        logger.info("Created huggingface checkpoint")
+        return
 
     metric_logger = build_metric_logger(job_config, parallel_dims)
     args, cmd_args = job_config.parse_args_from_command_line(job_config.args_list)
@@ -245,12 +258,15 @@ def main(job_config: JobConfig):
         f"sequence length {job_config.training.seq_len}, "
         f"total steps {job_config.training.steps} "
         f"(warmup {job_config.training.warmup_steps})"
+        f"(decay {job_config.training.decay_steps})"
     )
+    force_finish_train = False
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
         job_config, global_step=train_state.step
     ) as memory_profiler:
+        logger.debug("Got into profiling context")
         while train_state.step < job_config.training.steps:
             logger.info(f"loop {train_state.step}")
             train_state.step += 1
@@ -260,23 +276,28 @@ def main(job_config: JobConfig):
             logger.info(f"zgrad {train_state.step}")
             optimizers.zero_grad()
             logger.info(f"after_0 {train_state.step}")
+            logger.debug("step")
+
             for _ in range(job_config.training.gradient_accumulation_steps):
                 logger.info(f"before batch {train_state.step}")
 
-                batch = next(data_iterator)
+                batch = next(data_iterator,None)
+                if not batch:
+                    force_finish_train = True
+                    break
                 logger.info(f"after batch {train_state.step}")
-
                 input_ids, labels = batch
                 logger.info(f"before move batch to cuda {train_state.step}")
 
-                # ntokens_since_last_log += labels.numel()
+                ntokens_since_last_log += labels.numel()
                 input_ids = input_ids.cuda()
                 labels = labels.cuda()
-                # data_loading_times.append(time.perf_counter() - data_load_start)
+                data_loading_times.append(time.perf_counter() - data_load_start)
                 logger.info(f"before model forward {train_state.step}")
 
 
                 with train_context():
+                    logger.debug("enter context")
                     pred = model(input_ids)
                     loss = loss_fn(pred, labels)
                     logger.info(f"after loss {train_state.step}")
@@ -286,7 +307,8 @@ def main(job_config: JobConfig):
                     del pred
                     loss.backward()
             logger.info(f"after_loop {train_state.step}")
-            
+            if force_finish_train:
+                break
             for m in model_parts:
                 torch.nn.utils.clip_grad_norm_(
                     m.parameters(), job_config.training.max_norm, foreach=True
@@ -310,90 +332,92 @@ def main(job_config: JobConfig):
             losses_since_last_log.append(loss)
 
             # log train metrics
-            # if (
-            #     train_state.step == 1
-            #     or train_state.step % job_config.metrics.log_freq == 0
-            # ):
+            if (
+                train_state.step == 1
+                or train_state.step % job_config.metrics.log_freq == 0
+            ):
                 
-            #     losses = [loss.item() for loss in losses_since_last_log]
+                losses = [loss.item() for loss in losses_since_last_log]
 
-            #     perplexities = [2 ** loss.item() for loss in losses_since_last_log]
+                perplexities = [2 ** loss.item() for loss in losses_since_last_log]
 
-            #     avg_loss, max_loss = sum(losses) / len(losses), max(losses)
-            #     avg_perplexity, max_perplexity = sum(perplexities) / len(perplexities), max(perplexities)
-            #     logger.info("float")
+                avg_loss, max_loss = sum(losses) / len(losses), max(losses)
+                avg_perplexity, max_perplexity = sum(perplexities) / len(perplexities), max(perplexities)
+                logger.info("float")
 
-            #     if parallel_dims.dp_enabled:
-            #         global_avg_loss, global_max_loss = (
-            #             utils.dist_mean(avg_loss, dp_mesh),
-            #             utils.dist_max(max_loss, dp_mesh),
-            #         )
-            #         global_avg_perplexity, global_max_perplexity = (
-            #             utils.dist_mean(avg_perplexity, dp_mesh),
-            #             utils.dist_max(max_perplexity, dp_mesh),
-            #         )
-            #     else:
-            #         global_avg_loss, global_max_loss = avg_loss, max_loss
-            #         global_avg_perplexity, global_max_perplexity = avg_perplexity, max_perplexity
+                if parallel_dims.dp_enabled:
+                    global_avg_loss, global_max_loss = (
+                        utils.dist_mean(avg_loss, dp_mesh),
+                        utils.dist_max(max_loss, dp_mesh),
+                    )
+                    global_avg_perplexity, global_max_perplexity = (
+                        utils.dist_mean(avg_perplexity, dp_mesh),
+                        utils.dist_max(max_perplexity, dp_mesh),
+                    )
+                else:
+                    global_avg_loss, global_max_loss = avg_loss, max_loss
+                    global_avg_perplexity, global_max_perplexity = avg_perplexity, max_perplexity
 
-            #     # update train state
-            #     train_state.log_steps.append(train_state.step)
-            #     train_state.global_avg_losses.append(global_avg_loss)
-            #     train_state.global_max_losses.append(global_max_loss)
-            #     train_state.global_avg_perplexities.append(global_avg_perplexity)
-            #     train_state.global_max_perplexities.append(global_max_perplexity)
+                # update train state
+                train_state.log_steps.append(train_state.step)
+                train_state.global_avg_losses.append(global_avg_loss)
+                train_state.global_max_losses.append(global_max_loss)
+                train_state.global_avg_perplexities.append(global_avg_perplexity)
+                train_state.global_max_perplexities.append(global_max_perplexity)
 
-            #     time_delta = time.perf_counter() - time_last_log
+                time_delta = time.perf_counter() - time_last_log
 
-            #     # tokens per second, abbr. as wps by convention
-            #     wps = ntokens_since_last_log / (
-            #         time_delta * parallel_dims.model_parallel_size
-            #     )
-            #     # model FLOPS utilization
-            #     # For its definition and calculation, please refer to the PaLM paper:
-            #     # https://arxiv.org/abs/2204.02311
-            #     mfu = 100 * num_flop_per_token * wps / gpu_peak_flops
+                # tokens per second, abbr. as wps by convention
+                wps = ntokens_since_last_log / (
+                    time_delta * parallel_dims.model_parallel_size
+                )
+                # model FLOPS utilization
+                # For its definition and calculation, please refer to the PaLM paper:
+                # https://arxiv.org/abs/2204.02311
+                mfu = 100 * num_flop_per_token * wps / gpu_peak_flops
 
-            #     time_end_to_end = time_delta / job_config.metrics.log_freq
-            #     time_data_loading = sum(data_loading_times) / len(data_loading_times)
-            #     time_data_loading_pct = 100 * sum(data_loading_times) / time_delta
+                time_end_to_end = time_delta / job_config.metrics.log_freq
+                time_data_loading = sum(data_loading_times) / len(data_loading_times)
+                time_data_loading_pct = 100 * sum(data_loading_times) / time_delta
 
-            #     gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
+                gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
 
-            #     metrics = {
-            #         "train/loss_metrics/global_avg_loss": global_avg_loss,
-            #         "train/loss_metrics/global_max_loss": global_max_loss,
-            #         "train/loss_metrics/global_avg_perplexity": global_avg_perplexity,
-            #         "train/loss_metrics/global_max_perplexity": global_max_perplexity,
-            #         "train/wps": wps,
-            #         "train/mfu(%)": mfu,
-            #         "train/time_metrics/end_to_end(s)": time_end_to_end,
-            #         "train/time_metrics/data_loading(s)": time_data_loading,
-            #         "train/time_metrics/data_loading(%)": time_data_loading_pct,
-            #         "train/memory/max_active(GiB)": gpu_mem_stats.max_active_gib,
-            #         "train/memory/max_active(%)": gpu_mem_stats.max_active_pct,
-            #         "train/memory/max_reserved(GiB)": gpu_mem_stats.max_reserved_gib,
-            #         "train/memory/max_reserved(%)": gpu_mem_stats.max_reserved_pct,
-            #         "train/memory/num_alloc_retries": gpu_mem_stats.num_alloc_retries,
-            #         "train/memory/num_ooms": gpu_mem_stats.num_ooms,
-            #     }
-            #     metric_logger.log(metrics, step=train_state.step)
+                metrics = {
+                    "train/loss_metrics/global_avg_loss": global_avg_loss,
+                    "train/loss_metrics/global_max_loss": global_max_loss,
+                    "train/loss_metrics/global_avg_perplexity": global_avg_perplexity,
+                    "train/loss_metrics/global_max_perplexity": global_max_perplexity,
+                    "train/wps": wps,
+                    "train/mfu(%)": mfu,
+                    "train/time_metrics/end_to_end(s)": time_end_to_end,
+                    "train/time_metrics/data_loading(s)": time_data_loading,
+                    "train/time_metrics/data_loading(%)": time_data_loading_pct,
+                    "train/memory/max_active(GiB)": gpu_mem_stats.max_active_gib,
+                    "train/memory/max_active(%)": gpu_mem_stats.max_active_pct,
+                    "train/memory/max_reserved(GiB)": gpu_mem_stats.max_reserved_gib,
+                    "train/memory/max_reserved(%)": gpu_mem_stats.max_reserved_pct,
+                    "train/memory/num_alloc_retries": gpu_mem_stats.num_alloc_retries,
+                    "train/memory/num_ooms": gpu_mem_stats.num_ooms,
+                }
+                metric_logger.log(metrics, step=train_state.step)
 
-            #     logger.info(
-            #         "context: train  "
-            #         f"{color.cyan}step: {train_state.step:2}  "
-            #         f"{color.green}loss: {global_avg_loss:7.4f}  "
-            #         f"{color.yellow}memory: {gpu_mem_stats.max_reserved_gib:5.2f}GiB"
-            #         f"({gpu_mem_stats.max_reserved_pct:.2f}%)  "
-            #         f"{color.blue}wps: {round(wps):,}  "
-            #         f"{color.magenta}mfu: {mfu:.2f}%{color.reset}"
-            #     )
+                logger.info(
+                    "context: train  "
+                    f"{color.cyan}step: {train_state.step:2}  "
+                    f"{color.green}loss: {global_avg_loss:7.4f}  "
+                    f"{color.yellow}memory: {gpu_mem_stats.max_reserved_gib:5.2f}GiB"
+                    f"({gpu_mem_stats.max_reserved_pct:.2f}%)  "
+                    f"{color.blue}wps: {round(wps):,}  "
+                    f"{color.magenta}mfu: {mfu:.2f}%{color.reset}"
+                )
 
-            #     losses_since_last_log.clear()
-            #     ntokens_since_last_log = 0
-            #     data_loading_times.clear()
-            #     time_last_log = time.perf_counter()
-            #     gpu_memory_monitor.reset_peak_stats()
+                losses_since_last_log.clear()
+                ntokens_since_last_log = 0
+                data_loading_times.clear()
+                time_last_log = time.perf_counter()
+                gpu_memory_monitor.reset_peak_stats()
+            store_file_path = f"/tmp/rankstore_val_chemlactica_train_mini_{train_state.step}"
+            fin_val_path = f"/tmp/rankstore_outer_{train_state.step}"
 
             # log val metrics
             if (
@@ -401,18 +425,26 @@ def main(job_config: JobConfig):
                 and (train_state.step == 0
                 or train_state.step % job_config.validation.eval_freq == 0)
             ):
-                # with torch.no_grad():
-                model.eval()
-                # val_data_loader = build_hf_data_loader(
-                #     job_config.validation.dataset,
-                #     job_config.validation.dataset_path,
-                #     tokenizer,
-                #     val_bs,
-                #     job_config.training.seq_len,
-                #     dp_degree,
-                #     dp_rank,
-                #     False
-                # )
+
+                data_completion_store = create_fresh_file_store(store_file_path,world_size)
+                fin_val_store = create_fresh_file_store(fin_val_path,world_size)
+
+                val_data_loader = build_hf_data_loader(
+                    job_config.validation.dataset,
+                    job_config.validation.dataset_path,
+                    job_config.training.data_processing_style,
+                    tokenizer,
+                    val_bs,
+                    job_config.training.seq_len,
+                    dp_degree,
+                    dp_rank,
+                    False,
+                    pin_memory = job_config.dataloader.pin_memory,
+                    num_workers = job_config.dataloader.num_workers,
+                    special_mode = job_config.dataloader.special_mode,
+                    context = "val",
+                    store = data_completion_store,
+                )
                 num_flop_per_token_val = utils.get_num_flop_per_token_forward(
                     utils.get_num_params(model, exclude_embedding=True),
                     model_config,
@@ -435,25 +467,30 @@ def main(job_config: JobConfig):
                     color,
                     train_state.step,
                     num_flop_per_token_val,
-                    gpu_peak_flops
+                    gpu_peak_flops,
+                    dp_rank,
+                    fin_val_store,
                 )
+
                 logger.info("bar {train_state.step}")
                     # torch.distributed.barrier()
-                model.train()
+                del data_completion_store
+                gc.collect()
                 logger.info("bbar {train_state.step}")
+                del fin_val_store
 
 
-            checkpoint.save(
-                train_state.step, force=(train_state.step == job_config.training.steps)
-            )
-            logger.info(f"HIcheck {train_state.step}")
+            # checkpoint.save(
+            #     train_state.step, force=(train_state.step == job_config.training.steps)
+            # )
+            # logger.info(f"HIcheck {train_state.step}")
 
             # signal the profiler that the next profiling step has started
-            if torch_profiler:
-                torch_profiler.step()
-            if memory_profiler:
-                memory_profiler.step()
-            logger.info("HIprof")
+            # if torch_profiler:
+            #     torch_profiler.step()
+            # if memory_profiler:
+            #     memory_profiler.step()
+            # logger.info("HIprof")
 
             # reduce timeout after first train step for faster signal
             # (assuming lazy init and compilation are finished)
@@ -463,6 +500,17 @@ def main(job_config: JobConfig):
                     world_mesh=world_mesh,
                 )
             logger.info("HI")
+            if os.path.exists(store_file_path) and dp_rank==0:
+                os.remove(store_file_path)
+                logger.info("removed the store file")
+            else:
+                logger.info("no store file exists")
+
+            if os.path.exists(fin_val_path) and dp_rank==0:
+                os.remove(fin_val_path)
+                logger.info("removed the store file")
+            else:
+                logger.info("no store file exists")
 
 
     if torch.distributed.get_rank() == 0:
