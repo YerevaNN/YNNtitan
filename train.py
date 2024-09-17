@@ -455,7 +455,6 @@ def main(job_config: JobConfig):
                     metric_logger,
                     parallel_dims, 
                     gc_handler,
-                    # dp_mesh,
                     train_context,
                     gpu_memory_monitor,
                     data_loading_times,
@@ -469,24 +468,19 @@ def main(job_config: JobConfig):
                     fin_val_store,
                 )
 
-                logger.info("bar {train_state.step}")
-                    # torch.distributed.barrier()
                 gc.collect()
-                logger.info("bbar {train_state.step}")
                 del fin_val_store
 
 
-            # checkpoint.save(
-            #     train_state.step, force=(train_state.step == job_config.training.steps)
-            # )
-            # logger.info(f"HIcheck {train_state.step}")
+            checkpoint.save(
+                train_state.step, force=(train_state.step == job_config.training.steps)
+            )
 
             # signal the profiler that the next profiling step has started
-            # if torch_profiler:
-            #     torch_profiler.step()
-            # if memory_profiler:
-            #     memory_profiler.step()
-            # logger.info("HIprof")
+            if torch_profiler:
+                torch_profiler.step()
+            if memory_profiler:
+                memory_profiler.step()
 
             # reduce timeout after first train step for faster signal
             # (assuming lazy init and compilation are finished)
@@ -495,13 +489,6 @@ def main(job_config: JobConfig):
                     timeout=timedelta(seconds=job_config.comm.train_timeout_seconds),
                     world_mesh=world_mesh,
                 )
-            logger.info("HI")
-            if os.path.exists(store_file_path) and dp_rank==0:
-                os.remove(store_file_path)
-                logger.info("removed the store file")
-            else:
-                logger.info("no store file exists")
-
             if os.path.exists(fin_val_path) and dp_rank==0:
                 os.remove(fin_val_path)
                 logger.info("removed the store file")
