@@ -104,6 +104,7 @@ def main(job_config: JobConfig):
         data_loader = build_hf_data_loader(
             job_config.training.dataset,
             job_config.training.dataset_path,
+            job_config.training.data_processing_style,
             tokenizer,
             job_config.training.batch_size,
             job_config.training.seq_len,

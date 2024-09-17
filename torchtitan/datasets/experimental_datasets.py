@@ -11,7 +11,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import torch
 import torch.utils.data as data
-from torchtitan.datasets.tokenizer import Tokenizer
+from torchtitan.tokenizers.tokenizer import Tokenizer
 
 """
 The following distributed dataloaders are designed around 3 main principles:
