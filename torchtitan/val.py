@@ -33,13 +33,16 @@ def validate(
     total_loss = 0
     total_perplexity = 0
     cnt = 0
+
     model.eval()
+
     eval_state.step = 0
     val_data_iterator = iter(data_loader)
     while True:
+        batch = next(val_data_iterator,None)
         if fin_val_store.num_keys() > 1:
             batch = None
-        batch = next(val_data_iterator,None)
+
         if not batch:
             fin_val_store.set(str(dp_rank),"valfin")
             logger.info("plan to exit")
