@@ -56,7 +56,6 @@ def validate(
     total_n_tokens = 0
     total_loss = 0
     total_perplexity = 0
-    cnt = 0
     total_eval_time = 0
     loss = None
 
@@ -78,8 +77,6 @@ def validate(
             sync_val_end(end_of_validation_store, process_ids, dp_rank)
             break
 
-        eval_state.step += 1
-
         data_load_start = time.perf_counter()
         input_ids, labels = batch
 
@@ -96,13 +93,13 @@ def validate(
                     data_loading_times.append(time.perf_counter() - data_load_start)
                     pred = model(input_ids)
                     loss = loss_fn(pred, labels)
+                    eval_state.step += 1
                     del pred
 
         time_delta = time.perf_counter() - time_last_log
         total_eval_time += time_delta
         total_loss += loss
         total_perplexity += 2**loss
-        cnt += 1
         wps = n_tokens_in_curr / (time_delta * parallel_dims.model_parallel_size)
         mfu = 100 * num_flop_per_token * wps / gpu_peak_flops
         gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
