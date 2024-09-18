@@ -1,11 +1,15 @@
 import gc
 import os
 import time
-from typing import List
+from typing import List, Any
+from logging import Logger
 
 import torch
 from torch.distributed import FileStore
 from torch.nn.functional import cross_entropy
+from torchtitan.datasets.hf_datasets import DPAwareDataLoader
+from torchtitan.metrics import GPUMemoryMonitor, MetricLogger
+from torchtitan.parallelisms import ParallelDims
 
 from torchtitan.checkpoint import TrainState
 from torchtitan.utils import common_utils as utils
@@ -28,21 +32,21 @@ def sync_val_end(
 
 
 def validate(
-    model,
-    data_loader,
-    logger,
-    metric_logger,
-    parallel_dims,
-    gpu_memory_monitor,
-    data_loading_times,
-    time_last_log,
-    color,
-    train_step,  # for aim tracking of evaluation to be tracked correctly
-    num_flop_per_token,
-    gpu_peak_flops,
-    dp_rank,
-    world_size,
-    enable_compiled_autograd,
+    model: Any,  # otherwise would have to update union type for every architecture
+    data_loader: DPAwareDataLoader,
+    logger: Logger,
+    metric_logger: MetricLogger,
+    parallel_dims: ParallelDims,
+    gpu_memory_monitor: GPUMemoryMonitor,
+    data_loading_times: List,
+    time_last_log: float,
+    color: utils.Color,
+    train_step: int,  # for aim tracking of evaluation to be tracked correctly
+    num_flop_per_token: int,
+    gpu_peak_flops: int,
+    dp_rank: int,
+    world_size: int,
+    enable_compiled_autograd: bool,
 ):
     end_of_validation_path = f"{BASE_VALIDATION_SYNC_STORE_PATH}{train_step}"
     end_of_validation_store = create_fresh_file_store(
