@@ -1,5 +1,5 @@
 import time
-from pathlib import Path
+from torchtitan.checkpoint import TrainState
 import gc
 import torch
 from torch.nn.functional import cross_entropy
@@ -16,24 +16,24 @@ def validate(
     logger,
     metric_logger,
     parallel_dims,
-    gc_handler,
-    train_context,
     gpu_memory_monitor,
     data_loading_times,
     time_last_log,
     freq,
     color,
-    train_step,
+    train_step, # for aim tracking of evaluation to be tracked correctly
     num_flop_per_token,
     gpu_peak_flops,
     dp_rank,
     fin_val_store,
 ):
+    eval_state = TrainState()
     total_n_tokens = 0
     total_loss = 0
     total_perplexity = 0
     cnt = 0
     total_eval_time = 0
+    train_context = utils.get_train_context()
 
     model.eval()
 
@@ -120,3 +120,4 @@ def validate(
         del loss
 
     model.train()
+    gc.collect()

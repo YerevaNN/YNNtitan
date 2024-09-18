@@ -37,21 +37,6 @@ from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_prof
 from torchtitan.val import validate
 
 
-def get_train_context(enable_loss_parallel: bool, enable_compiled_autograd: bool):
-    @contextlib.contextmanager
-    def context():
-        with contextlib.ExitStack() as stack:
-            if enable_loss_parallel:
-                stack.enter_context(torch.distributed.tensor.parallel.loss_parallel())
-            if enable_compiled_autograd:
-                stack.enter_context(
-                    torch._dynamo.utils.maybe_enable_compiled_autograd(True)
-                )
-            yield
-
-    return context
-
-
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
 def main(job_config: JobConfig):
@@ -152,11 +137,19 @@ def main(job_config: JobConfig):
 
     # log model size
     model_param_count = utils.get_num_params(model)
+
     num_flop_per_token = utils.get_num_flop_per_token(
         utils.get_num_params(model, exclude_embedding=True),
         model_config,
         job_config.training.seq_len,
     )
+
+    num_flop_per_token_val = utils.get_num_flop_per_token_forward(
+        utils.get_num_params(model, exclude_embedding=True),
+        model_config,
+        job_config.training.seq_len,
+    )
+
     logger.info(
         f"{color.blue}Model {model_name} {job_config.model.flavor} "
         f"{color.red}size: {model_param_count:,} total parameters{color.reset}"
@@ -197,7 +190,6 @@ def main(job_config: JobConfig):
     lr_schedulers = build_lr_schedulers(optimizers.optimizers, job_config)
 
     train_state = TrainState()
-    eval_state = TrainState()
 
     # load initial checkpoint
     checkpoint = CheckpointManager(
@@ -240,7 +232,7 @@ def main(job_config: JobConfig):
 
     data_iterator = iter(data_loader)
 
-    train_context = get_train_context(
+    train_context = utils.get_train_context(
         parallel_dims.loss_parallel_enabled,
         job_config.experimental.enable_compiled_autograd,
     )
@@ -449,20 +441,12 @@ def main(job_config: JobConfig):
                     special_mode=job_config.dataloader.special_mode,
                     context="val",
                 )
-                num_flop_per_token_val = utils.get_num_flop_per_token_forward(
-                    utils.get_num_params(model, exclude_embedding=True),
-                    model_config,
-                    job_config.training.seq_len,
-                )
                 validate(
                     model,
                     val_data_loader,
-                    eval_state,
                     logger,
                     metric_logger,
                     parallel_dims,
-                    gc_handler,
-                    train_context,
                     gpu_memory_monitor,
                     data_loading_times,
                     time_last_val_log,

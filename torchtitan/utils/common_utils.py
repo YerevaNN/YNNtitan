@@ -9,12 +9,28 @@ import os
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Union
+import contextlib
 
 import torch
 import torch.distributed._functional_collectives as funcol
 import torch.distributed.distributed_c10d as c10d
 from torch.distributed.device_mesh import DeviceMesh
 from torchtitan.logging import logger
+
+
+def get_train_context(enable_loss_parallel: bool, enable_compiled_autograd: bool):
+    @contextlib.contextmanager
+    def context():
+        with contextlib.ExitStack() as stack:
+            if enable_loss_parallel:
+                stack.enter_context(torch.distributed.tensor.parallel.loss_parallel())
+            if enable_compiled_autograd:
+                stack.enter_context(
+                    torch._dynamo.utils.maybe_enable_compiled_autograd(True)
+                )
+            yield
+
+    return context
 
 
 def dist_max(x: Union[int, float], mesh: DeviceMesh) -> float:
@@ -131,6 +147,7 @@ def get_num_flop_per_token(num_params: int, model_config, seq_len) -> int:
     flop_per_token = 6 * num_params + 12 * l * h * q * t
 
     return flop_per_token
+
 
 def get_num_flop_per_token_forward(num_params: int, model_config, seq_len) -> int:
     l, h, q, t = (
