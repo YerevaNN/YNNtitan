@@ -1,7 +1,10 @@
 import time
 from torchtitan.checkpoint import TrainState
+from torchtitan.utils import common_utils as utils
+from torchtitan.utils.dataset_utils import create_fresh_file_store
 import gc
 import torch
+import os
 from torch.nn.functional import cross_entropy
 
 
@@ -12,28 +15,35 @@ def loss_fn(pred, labels):
 def validate(
     model,
     data_loader,
-    eval_state,
     logger,
     metric_logger,
     parallel_dims,
     gpu_memory_monitor,
     data_loading_times,
     time_last_log,
-    freq,
     color,
-    train_step, # for aim tracking of evaluation to be tracked correctly
+    train_step,  # for aim tracking of evaluation to be tracked correctly
     num_flop_per_token,
     gpu_peak_flops,
     dp_rank,
-    fin_val_store,
+    world_size,
+    enable_compiled_autograd,
 ):
+    end_of_validation_path = f"/tmp/rankstore_outer_{train_step}"
+    end_of_validation_store = create_fresh_file_store(
+        end_of_validation_path, world_size
+    )
     eval_state = TrainState()
     total_n_tokens = 0
     total_loss = 0
     total_perplexity = 0
     cnt = 0
     total_eval_time = 0
-    train_context = utils.get_train_context()
+
+    train_context = utils.get_train_context(
+        parallel_dims.loss_parallel_enabled,
+        enable_compiled_autograd,
+    )
 
     model.eval()
 
@@ -43,9 +53,9 @@ def validate(
         batch = next(val_data_iterator, None)
 
         if not batch:
-            fin_val_store.set(str(dp_rank), "valfin")
+            end_of_validation_store.set(str(dp_rank), "valfin")
             logger.info("plan to exit")
-            fin_val_store.wait(["0", "1"])
+            end_of_validation_store.wait(["0", "1"])
             time.sleep(0.2)
             logger.info("exiting")
             break
@@ -58,7 +68,7 @@ def validate(
         labels = labels.cuda()
         with train_context():
             with torch.no_grad():
-                if fin_val_store.num_keys() > 1:
+                if end_of_validation_store.num_keys() > 1:
                     continue
                 else:
                     total_n_tokens += n_tokens_in_curr
@@ -73,9 +83,6 @@ def validate(
         cnt += 1
         wps = n_tokens_in_curr / (time_delta * parallel_dims.model_parallel_size)
         mfu = 100 * num_flop_per_token * wps / gpu_peak_flops
-        time_end_to_end = time_delta / freq
-        time_data_loading = sum(data_loading_times) / len(data_loading_times)
-        time_data_loading_pct = 100 * sum(data_loading_times) / time_delta
         gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
         logger.info(
             "context: val"
@@ -120,4 +127,10 @@ def validate(
         del loss
 
     model.train()
+    if os.path.exists(end_of_validation_path) and dp_rank == 0:
+        os.remove(end_of_validation_path)
+        logger.info("removed the store file")
+    else:
+        logger.info("no store file exists")
+    del end_of_validation_store
     gc.collect()

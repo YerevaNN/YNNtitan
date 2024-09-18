@@ -35,11 +35,12 @@ from torchtitan.optimizer import build_lr_schedulers, build_optimizers
 from torchtitan.parallelisms import models_parallelize_fns, ParallelDims
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
 from torchtitan.val import validate
+from typing import Any
 
 
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
-def main(job_config: JobConfig):
+def main(job_config: Any):
     init_logger(job_config.logging.log_level)
     logger.info(f"Starting job: {job_config.job.description}")
 
@@ -417,15 +418,12 @@ def main(job_config: JobConfig):
                 data_loading_times.clear()
                 time_last_log = time.perf_counter()
                 gpu_memory_monitor.reset_peak_stats()
-            fin_val_path = f"/tmp/rankstore_outer_{train_state.step}"
 
             # log val metrics
             if job_config.validation.enable_val and (
                 train_state.step == 0
                 or train_state.step % job_config.validation.eval_freq == 0
             ):
-                fin_val_store = create_fresh_file_store(fin_val_path, world_size)
-
                 val_data_loader = build_hf_data_loader(
                     job_config.validation.dataset,
                     job_config.validation.dataset_path,
@@ -450,17 +448,14 @@ def main(job_config: JobConfig):
                     gpu_memory_monitor,
                     data_loading_times,
                     time_last_val_log,
-                    job_config.validation.eval_freq,
                     color,
                     train_state.step,
                     num_flop_per_token_val,
                     gpu_peak_flops,
                     dp_rank,
-                    fin_val_store,
+                    world_size,
+                    job_config.experimental.enable_compiled_autograd,
                 )
-
-                gc.collect()
-                del fin_val_store
 
             checkpoint.save(
                 train_state.step, force=(train_state.step == job_config.training.steps)
@@ -479,11 +474,6 @@ def main(job_config: JobConfig):
                     timeout=timedelta(seconds=job_config.comm.train_timeout_seconds),
                     world_mesh=world_mesh,
                 )
-            if os.path.exists(fin_val_path) and dp_rank == 0:
-                os.remove(fin_val_path)
-                logger.info("removed the store file")
-            else:
-                logger.info("no store file exists")
 
     if torch.distributed.get_rank() == 0:
         logger.info("Sleeping 2 seconds for other ranks to complete")
