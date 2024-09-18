@@ -243,7 +243,6 @@ def main(job_config: Any):
     ntokens_since_last_log = 0
     data_loading_times = []
     time_last_log = time.perf_counter()
-    time_last_val_log = time.perf_counter()
     gpu_memory_monitor.reset_peak_stats()
 
     checkpoint.reset()
@@ -264,53 +263,44 @@ def main(job_config: Any):
     ) as torch_profiler, maybe_enable_memory_snapshot(
         job_config, global_step=train_state.step
     ) as memory_profiler:
-        logger.debug("Got into profiling context")
         while train_state.step < job_config.training.steps:
-            logger.info(f"loop {train_state.step}")
+            logger.debug(f"starting train step: {train_state.step}")
             train_state.step += 1
             gc_handler.run(train_state.step)
             # get batch
             data_load_start = time.perf_counter()
-            logger.info(f"zgrad {train_state.step}")
             optimizers.zero_grad()
-            logger.info(f"after_0 {train_state.step}")
-            logger.debug("step")
 
             for _ in range(job_config.training.gradient_accumulation_steps):
-                logger.info(f"before batch {train_state.step}")
-
                 batch = next(data_iterator, None)
+                logger.debug(f"fetched batch {train_state.step}")
                 if not batch:
                     force_finish_train = True
                     break
-                logger.info(f"after batch {train_state.step}")
                 input_ids, labels = batch
-                logger.info(f"before move batch to cuda {train_state.step}")
 
                 ntokens_since_last_log += labels.numel()
                 input_ids = input_ids.cuda()
                 labels = labels.cuda()
                 data_loading_times.append(time.perf_counter() - data_load_start)
-                logger.info(f"before model forward {train_state.step}")
+                logger.debug(f"before model forward {train_state.step}")
 
                 with train_context():
-                    logger.debug("enter context")
                     pred = model(input_ids)
                     loss = loss_fn(pred, labels)
-                    logger.info(f"after loss {train_state.step}")
+                    logger.debug(f"after loss {train_state.step}")
 
                     # pred.shape=(bs, seq_len, vocab_size)
                     # need to free to before bwd to avoid peaking memory
                     del pred
                     loss.backward()
-            logger.info(f"after_loop {train_state.step}")
+            logger.debug(f"after backward {train_state.step}")
             if force_finish_train:
                 break
             for m in model_parts:
                 torch.nn.utils.clip_grad_norm_(
                     m.parameters(), job_config.training.max_norm, foreach=True
                 )
-            logger.info(f"clip {train_state.step}")
 
             # sync float8 amaxes and scales
             float8_handler.sync_float8_amax_and_scale_history(model_parts)
@@ -319,12 +309,10 @@ def main(job_config: Any):
             # optimizer step
             optimizers.step()
             lr_schedulers.step()
-            logger.info(f"step {train_state.step}")
 
             # calculate float8 dynamic amax/scale for all-parameter for FSDP2
             # it issues a single all-reduce for all parameters at once for better performance
             float8_handler.precompute_float8_dynamic_scale_for_fsdp(model_parts)
-            logger.info(f"float {train_state.step}")
 
             losses_since_last_log.append(loss)
 
@@ -342,7 +330,6 @@ def main(job_config: Any):
                     sum(perplexities) / len(perplexities),
                     max(perplexities),
                 )
-                logger.info("float")
 
                 if parallel_dims.dp_enabled:
                     global_avg_loss, global_max_loss = (
@@ -446,8 +433,6 @@ def main(job_config: Any):
                     metric_logger,
                     parallel_dims,
                     gpu_memory_monitor,
-                    data_loading_times,
-                    time_last_val_log,
                     color,
                     train_state.step,
                     num_flop_per_token_val,
