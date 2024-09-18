@@ -29,7 +29,7 @@ from torchtitan.models import (
     model_name_to_weights_download_fns,
     model_name_to_weights_export_fns,
     model_name_to_tokenizer,
-    models_config
+    models_config,
 )
 from torchtitan.optimizer import build_lr_schedulers, build_optimizers
 from torchtitan.parallelisms import models_parallelize_fns, ParallelDims
@@ -105,15 +105,17 @@ def main(job_config: JobConfig):
         job_config.training.seq_len,
         dp_degree,
         dp_rank,
-        pin_memory = job_config.dataloader.pin_memory,
-        num_workers = job_config.dataloader.num_workers,
-        special_mode = job_config.dataloader.special_mode,
+        pin_memory=job_config.dataloader.pin_memory,
+        num_workers=job_config.dataloader.num_workers,
+        special_mode=job_config.dataloader.special_mode,
     )
 
-
     # validation batch size
-    val_bs = job_config.validation.batch_size if job_config.validation.batch_size != 0 else job_config.metrics.batch_size
-    
+    val_bs = (
+        job_config.validation.batch_size
+        if job_config.validation.batch_size != 0
+        else job_config.metrics.batch_size
+    )
 
     # build model (using meta init)
     model_cls = model_name_to_cls[model_name]
@@ -137,9 +139,10 @@ def main(job_config: JobConfig):
         ), "Must create seed-checkpoint using one gpu, to disable sharding"
         model.to_empty(device=init_device)
         model_name_to_weights_download_fns[model_name](
-            model, weights_path=job_config.checkpoint.load_folder,
+            model,
+            weights_path=job_config.checkpoint.load_folder,
             source=job_config.model_download_export.weights_source,
-            token_embedding_size=model_config.vocab_size
+            token_embedding_size=model_config.vocab_size,
         )
 
     # a no-op hander if float8 is not enabled
@@ -222,8 +225,10 @@ def main(job_config: JobConfig):
         ), "Must create seed-checkpoint using one gpu, to disable sharding"
         model_name_to_weights_export_fns[model_name](
             model,
-            save_dir=os.path.join(job_config.job.dump_folder, job_config.checkpoint.save_folder),
-            token_embedding_size=model_config.vocab_size
+            save_dir=os.path.join(
+                job_config.job.dump_folder, job_config.checkpoint.save_folder
+            ),
+            token_embedding_size=model_config.vocab_size,
         )
         logger.info("Created huggingface checkpoint")
         return
@@ -281,7 +286,7 @@ def main(job_config: JobConfig):
             for _ in range(job_config.training.gradient_accumulation_steps):
                 logger.info(f"before batch {train_state.step}")
 
-                batch = next(data_iterator,None)
+                batch = next(data_iterator, None)
                 if not batch:
                     force_finish_train = True
                     break
@@ -294,7 +299,6 @@ def main(job_config: JobConfig):
                 labels = labels.cuda()
                 data_loading_times.append(time.perf_counter() - data_load_start)
                 logger.info(f"before model forward {train_state.step}")
-
 
                 with train_context():
                     logger.debug("enter context")
@@ -336,13 +340,15 @@ def main(job_config: JobConfig):
                 train_state.step == 1
                 or train_state.step % job_config.metrics.log_freq == 0
             ):
-                
                 losses = [loss.item() for loss in losses_since_last_log]
 
                 perplexities = [2 ** loss.item() for loss in losses_since_last_log]
 
                 avg_loss, max_loss = sum(losses) / len(losses), max(losses)
-                avg_perplexity, max_perplexity = sum(perplexities) / len(perplexities), max(perplexities)
+                avg_perplexity, max_perplexity = (
+                    sum(perplexities) / len(perplexities),
+                    max(perplexities),
+                )
                 logger.info("float")
 
                 if parallel_dims.dp_enabled:
@@ -356,7 +362,10 @@ def main(job_config: JobConfig):
                     )
                 else:
                     global_avg_loss, global_max_loss = avg_loss, max_loss
-                    global_avg_perplexity, global_max_perplexity = avg_perplexity, max_perplexity
+                    global_avg_perplexity, global_max_perplexity = (
+                        avg_perplexity,
+                        max_perplexity,
+                    )
 
                 # update train state
                 train_state.log_steps.append(train_state.step)
@@ -419,13 +428,11 @@ def main(job_config: JobConfig):
             fin_val_path = f"/tmp/rankstore_outer_{train_state.step}"
 
             # log val metrics
-            if (
-                job_config.validation.enable_val
-                and (train_state.step == 0
-                or train_state.step % job_config.validation.eval_freq == 0)
+            if job_config.validation.enable_val and (
+                train_state.step == 0
+                or train_state.step % job_config.validation.eval_freq == 0
             ):
-
-                fin_val_store = create_fresh_file_store(fin_val_path,world_size)
+                fin_val_store = create_fresh_file_store(fin_val_path, world_size)
 
                 val_data_loader = build_hf_data_loader(
                     job_config.validation.dataset,
@@ -437,10 +444,10 @@ def main(job_config: JobConfig):
                     dp_degree,
                     dp_rank,
                     False,
-                    pin_memory = job_config.dataloader.pin_memory,
-                    num_workers = job_config.dataloader.num_workers,
-                    special_mode = job_config.dataloader.special_mode,
-                    context = "val",
+                    pin_memory=job_config.dataloader.pin_memory,
+                    num_workers=job_config.dataloader.num_workers,
+                    special_mode=job_config.dataloader.special_mode,
+                    context="val",
                 )
                 num_flop_per_token_val = utils.get_num_flop_per_token_forward(
                     utils.get_num_params(model, exclude_embedding=True),
@@ -453,13 +460,13 @@ def main(job_config: JobConfig):
                     eval_state,
                     logger,
                     metric_logger,
-                    parallel_dims, 
+                    parallel_dims,
                     gc_handler,
                     train_context,
                     gpu_memory_monitor,
                     data_loading_times,
                     time_last_val_log,
-                    job_config.validation.eval_freq, 
+                    job_config.validation.eval_freq,
                     color,
                     train_state.step,
                     num_flop_per_token_val,
@@ -470,7 +477,6 @@ def main(job_config: JobConfig):
 
                 gc.collect()
                 del fin_val_store
-
 
             checkpoint.save(
                 train_state.step, force=(train_state.step == job_config.training.steps)
@@ -489,12 +495,11 @@ def main(job_config: JobConfig):
                     timeout=timedelta(seconds=job_config.comm.train_timeout_seconds),
                     world_mesh=world_mesh,
                 )
-            if os.path.exists(fin_val_path) and dp_rank==0:
+            if os.path.exists(fin_val_path) and dp_rank == 0:
                 os.remove(fin_val_path)
                 logger.info("removed the store file")
             else:
                 logger.info("no store file exists")
-
 
     if torch.distributed.get_rank() == 0:
         logger.info("Sleeping 2 seconds for other ranks to complete")
