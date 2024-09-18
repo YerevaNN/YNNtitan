@@ -1,13 +1,15 @@
+import gc
+import os
 import time
+from typing import List
+
+import torch
+from torch.distributed import FileStore
+from torch.nn.functional import cross_entropy
+
 from torchtitan.checkpoint import TrainState
 from torchtitan.utils import common_utils as utils
 from torchtitan.utils.dataset_utils import create_fresh_file_store
-import gc
-import torch
-import os
-from torch.nn.functional import cross_entropy
-from torch.distributed import FileStore
-from typing import List
 
 
 def loss_fn(pred, labels):
