@@ -6,10 +6,23 @@ import gc
 import torch
 import os
 from torch.nn.functional import cross_entropy
+from torch.distributed import FileStore
+from typing import List
 
 
 def loss_fn(pred, labels):
     return cross_entropy(pred.flatten(0, 1), labels.flatten(0, 1))
+
+
+BASE_VALIDATION_SYNC_STORE_PATH = "/tmp/validation_sync_store_step_"
+
+
+def sync_val_end(
+    end_of_validation_store: FileStore, process_ids: List[str], dp_rank: int
+):
+    end_of_validation_store.set(str(dp_rank), "valfin")
+    end_of_validation_store.wait(process_ids)
+    return True
 
 
 def validate(
@@ -29,7 +42,7 @@ def validate(
     world_size,
     enable_compiled_autograd,
 ):
-    end_of_validation_path = f"/tmp/rankstore_outer_{train_step}"
+    end_of_validation_path = f"{BASE_VALIDATION_SYNC_STORE_PATH}{train_step}"
     end_of_validation_store = create_fresh_file_store(
         end_of_validation_path, world_size
     )
@@ -39,11 +52,14 @@ def validate(
     total_perplexity = 0
     cnt = 0
     total_eval_time = 0
+    loss = None
 
     train_context = utils.get_train_context(
         parallel_dims.loss_parallel_enabled,
         enable_compiled_autograd,
     )
+
+    process_ids = [str(rank) for rank in range(world_size)]
 
     model.eval()
 
@@ -53,29 +69,29 @@ def validate(
         batch = next(val_data_iterator, None)
 
         if not batch:
-            end_of_validation_store.set(str(dp_rank), "valfin")
-            logger.info("plan to exit")
-            end_of_validation_store.wait(["0", "1"])
-            time.sleep(0.2)
-            logger.info("exiting")
+            sync_val_end(end_of_validation_store, process_ids, dp_rank)
             break
-        eval_state.step += 1
-        data_load_start = time.perf_counter()
 
+        eval_state.step += 1
+
+        data_load_start = time.perf_counter()
         input_ids, labels = batch
+
         n_tokens_in_curr = labels.numel()
         input_ids = input_ids.cuda()
         labels = labels.cuda()
+
         with train_context():
             with torch.no_grad():
                 if end_of_validation_store.num_keys() > 1:
                     continue
                 else:
-                    total_n_tokens += n_tokens_in_curr
+                    total_n_tokens += n_tokens_in_curr  # we only add to the total tokens if we actually run a prediction
                     data_loading_times.append(time.perf_counter() - data_load_start)
                     pred = model(input_ids)
                     loss = loss_fn(pred, labels)
                     del pred
+
         time_delta = time.perf_counter() - time_last_log
         total_eval_time += time_delta
         total_loss += loss
@@ -84,6 +100,7 @@ def validate(
         wps = n_tokens_in_curr / (time_delta * parallel_dims.model_parallel_size)
         mfu = 100 * num_flop_per_token * wps / gpu_peak_flops
         gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
+
         logger.info(
             "context: val"
             f"{color.cyan}step: {eval_state.step}  "
@@ -121,16 +138,15 @@ def validate(
     # }
     metric_logger.log(metrics, step=train_step)
 
-    del val_data_iterator
-    del data_loader
     if loss:
         del loss
 
-    model.train()
     if os.path.exists(end_of_validation_path) and dp_rank == 0:
         os.remove(end_of_validation_path)
         logger.info("removed the store file")
     else:
         logger.info("no store file exists")
-    del end_of_validation_store
+    del val_data_iterator, data_loader, end_of_validation_store
+
     gc.collect()
+    model.train()
