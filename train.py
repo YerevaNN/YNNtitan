@@ -4,19 +4,15 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import contextlib
 import os
 import time
 from datetime import timedelta
-from pathlib import Path
-import gc
 
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
 from torch.fx import GraphModule
 
 from torchtitan.utils import common_utils as utils
-from torchtitan.utils.dataset_utils import create_fresh_file_store
 from torchtitan.checkpoint import CheckpointManager, TrainState
 from torchtitan.config_manager import JobConfig
 from torchtitan.datasets import build_hf_data_loader
@@ -435,7 +431,6 @@ def main(job_config: Any):
                     pin_memory=job_config.dataloader.pin_memory,
                     num_workers=job_config.dataloader.num_workers,
                     special_mode=job_config.dataloader.special_mode,
-                    context="val",
                 )
                 validate(
                     model,
@@ -449,6 +444,7 @@ def main(job_config: Any):
                     num_flop_per_token_val,
                     gpu_peak_flops,
                     dp_rank,
+                    dp_mesh,
                     world_size,
                     job_config.experimental.enable_compiled_autograd,
                 )

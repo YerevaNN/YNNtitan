@@ -241,7 +241,6 @@ def build_hf_data_loader(
     pin_memory: bool = False,
     num_workers: int = 0,
     special_mode = None,
-    context = "train",
 ):
 
     hf_ds = HuggingFaceDataset(

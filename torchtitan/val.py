@@ -43,6 +43,7 @@ def validate(
     num_flop_per_token: int,
     gpu_peak_flops: int,
     dp_rank: int,
+    dp_mesh,
     world_size: int,
     enable_compiled_autograd: bool,
 ):
@@ -122,9 +123,12 @@ def validate(
     avg_time_end_to_end = total_eval_time / eval_state.step
     gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
 
+    global_total_loss = utils.dist_mean(total_loss, dp_mesh)
+    global_total_perplexity = utils.dist_mean(total_perplexity, dp_mesh)
+    
     metrics = {
-        "val/loss_metrics/global_avg_loss": total_loss / eval_state.step,
-        "val/loss_metrics/global_avg_perplexity": total_perplexity / eval_state.step,
+        "val/loss_metrics/global_avg_loss": global_total_loss / eval_state.step,
+        "val/loss_metrics/global_avg_perplexity": global_total_perplexity / eval_state.step,
         "val/wps": total_n_tokens / total_eval_time,
         "val/mfu(%)": 100
         * num_flop_per_token
