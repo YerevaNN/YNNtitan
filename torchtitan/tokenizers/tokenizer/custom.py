@@ -11,8 +11,15 @@ import os
 
 from torchtitan.logging import logger
 from transformers import AutoTokenizer
+from safe import SAFETokenizer
 
 os.environ["TOKENIZER_PARALLELISM"] = "true"
+
+
+def get_tokenizer_class(tokenizer_path):
+    return {
+        "datamol-io/safe-gpt": SAFETokenizer
+    }.get(tokenizer_path, AutoTokenizer)
 
 
 class CustomTokenizer:
@@ -25,7 +32,7 @@ class CustomTokenizer:
     def __init__(self, tokenizer_path: str):
 
         # Load a tokenizer
-        self.model = AutoTokenizer.from_pretrained(tokenizer_path)
+        self.model = get_tokenizer_class(tokenizer_path).from_pretrained(tokenizer_path)
         # the padding is done for efficiency reasons,
         # when the token embedding size if a nice number (ege is divisible by to many times), the code runs more efficiently
         self.pad_to_multiple_of = 8
@@ -38,8 +45,15 @@ class CustomTokenizer:
         self._n_words: int = len(self.model)
         self.bos_id: int = self.model.bos_token_id
         self.eos_id: int = self.model.eos_token_id
-        self.pad_id: int = self.model.pad_token_id
-        self.unk_id: int = self.model.unk_token_id
+        try:
+            self.unk_id: int = self.model.unk_token_id
+        except Exception as e:
+            logger.info("Could not assign unk token id.")
+        try:
+            self.pad_id: int = self.model.pad_token_id
+        except Exception as e:
+            logger.info("Could not assign pad token id.")
+
         logger.info(
             f"CustomTokenizer built: #words {self.n_words}, BOS ID {self.bos_id}, EOS ID {self.eos_id}"
         )

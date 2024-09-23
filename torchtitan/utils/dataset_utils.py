@@ -6,6 +6,7 @@ import json
 from .text_format_utils import generate_formatted_string, delete_empty_tags
 import torch
 import os
+import safe
 from pathlib import Path
 
 TEMPORARY_FILES_PATH = Path('/tmp')
@@ -52,3 +53,12 @@ def sft_formatting_prompts_func(example):
         )
         output_texts.append(text)
     return output_texts
+
+
+def only_molecule_safe_style_processing(sample, rng):
+    try:
+        smiles = json.loads(sample["text"])["SMILES"]
+        return safe.encode(smiles)
+    except Exception as e:
+        print(e)
+    return ""

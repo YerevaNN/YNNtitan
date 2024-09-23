@@ -26,7 +26,7 @@ except ImportError as e:
 
 from torchtitan.tokenizers.tokenizer import Tokenizer
 from torchtitan.logging import logger
-from torchtitan.utils.dataset_utils import chemlactica_style_data_processing,create_fresh_file_store
+from torchtitan.utils.dataset_utils import chemlactica_style_data_processing,create_fresh_file_store, only_molecule_safe_style_processing
 
 from datasets import load_dataset
 from datasets.distributed import split_dataset_by_node
@@ -41,7 +41,8 @@ _supported_datasets = {
 }
 
 _supported_data_processing_styles = {
-    "chemlactica_style": chemlactica_style_data_processing
+    "chemlactica_style": chemlactica_style_data_processing,
+    "only_molecule_safe": only_molecule_safe_style_processing
 }
 
 
@@ -120,11 +121,11 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         else:
             dataset_files = glob.glob(os.path.join(dataset_path, "*.jsonl"))
             ds = load_dataset("text", data_files=dataset_files, split="train", streaming=True)
+        
         try:
             data_processing_fn = _supported_data_processing_styles[data_processing_style]
         except KeyError as e:
             raise ValueError(f"Unsupported data processing style: {data_processing_style}")
-        # data_processing_fn = lambda x, e: str(x)
 
         # TODO: support shuffling and checkpointing
         self.dataset_name = dataset_name

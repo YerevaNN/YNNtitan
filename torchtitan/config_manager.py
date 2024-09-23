@@ -205,8 +205,8 @@ class JobConfig:
         )
         self.parser.add_argument(
             "--training.data_processing_style",
-            choices=["chemlactica_style"],
-            default="chemlactica_style",
+            type=str,
+            default=None,
             help="""
                 Specifies the method for processing data prior to tokenization.""",
         )
