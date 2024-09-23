@@ -212,9 +212,6 @@ class JobConfig:
                 Specifies the method for processing data prior to tokenization.""",
         )
         self.parser.add_argument(
-            "--training.batch_size", type=int, default=8, help="Batch size"
-        )
-        self.parser.add_argument(
             "--training.gradient_accumulation_steps",
             type=int,
             default=1,
@@ -391,7 +388,7 @@ class JobConfig:
             "--validation.batch_size", type=int, default=0
         )
         self.parser.add_argument(
-            "--validation.dataset", type=str, default="c4_mini", help="Dataset to use"
+            "--validation.dataset", type=str, help="Dataset to use", default=None
         )
         self.parser.add_argument(
             "--validation.dataset_path",
@@ -399,9 +396,10 @@ class JobConfig:
             help="""
                 Path to the dataset for validation in the file system. If provided, data will be
                 loaded from this path instead of downloaded.""",
+            default=None,
         )
         self.parser.add_argument(
-            "--validation.eval_freq", type=int, default=1, help="How often to evaluate the model and log metrics to aim."
+            "--validation.eval_freq", type=int, default=None, help="How often to evaluate the model and log metrics to aim."
         )
         self.parser.add_argument(
             "--validation.enable_val", type=bool, default=False, help="Whether to do validation."

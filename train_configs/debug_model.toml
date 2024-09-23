@@ -49,7 +49,7 @@ data_process_style="chemlactica_style"
 batch_size = 2
 eval_freq = 5
 enable_val = true
-dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M)
+dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
 
 [experimental]
 pipeline_parallel_degree = 1

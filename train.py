@@ -96,11 +96,22 @@ def main(job_config: Any):
         special_mode=job_config.dataloader.special_mode,
     )
 
-    # validation batch size
+    # check the validation parameters
+    if not job_config.validation.dataset_path and not job_config.validation.dataset:
+        raise ValueError("You didn't specify the validation dataset.")
+    if not job_config.validation.eval_freq:
+        logger.info("You didn't specify the frequency of evaluation. The default value is 1024.")
+    if job_config.validation.batch_size == None:
+        logger.info("You didn't specify the batch size for validation. The batch size for the training will be used instead.")
     val_bs = (
         job_config.validation.batch_size
         if job_config.validation.batch_size != 0
-        else job_config.metrics.batch_size
+        else job_config.training.batch_size
+    )
+    eval_freq = (
+        job_config.validation.eval_freq
+        if job_config.validation.eval_freq
+        else 1024
     )
 
     # build model (using meta init)
@@ -409,7 +420,7 @@ def main(job_config: Any):
             # log val metrics
             if job_config.validation.enable_val and (
                 train_state.step == 0
-                or train_state.step % job_config.validation.eval_freq == 0
+                or train_state.step % eval_freq == 0
             ):
                 val_data_loader = build_hf_data_loader(
                     job_config.validation.dataset,
