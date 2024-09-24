@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 
@@ -11,7 +11,7 @@ set -ex
 # e.g.
 # LOG_RANK=0,1 NGPU=4 ./run_llama_train.sh
 NGPU=${NGPU:-"2"}
-LOG_RANK=0,1
+LOG_RANK="0,1"
 CONFIG_FILE=${CONFIG_FILE:-"./train_configs/debug_model.toml"}
 MAX_RESTARTS=5
 

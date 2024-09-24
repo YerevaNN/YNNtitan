@@ -22,7 +22,7 @@ model_name_to_cls = {
 model_name_to_tokenizer = {
     "llama2": "sentencepiece",
     "llama3": "tiktoken",
-    "opt": "tiktoken"
+    "opt": "custom"
 }
 
 model_name_to_weights_loading_fns = {
