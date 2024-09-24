@@ -1,9 +1,9 @@
 # torchtitan Config.toml
 
 [job]
-dump_folder = "./outputs"
-description = "Llama 3 debug training"
-use_for_integration_test = true
+dump_folder = "/nfs/dgx/raid/chem/titan_outputs"
+description = "Galactica training"
+use_for_integration_test = false
 
 [profiling]
 enable_profiling = false
@@ -15,59 +15,57 @@ save_memory_snapshot_folder = "memory_snapshot"
 [metrics]
 log_freq = 1
 enable_color_printing = true
-# enable_aim = true
-# save_aim_folder = "aim"
-#aim_hash = "1d56ec7bed87438684a8da6b"
+enable_aim = true
+save_aim_folder = "aim"
+#aim_hash = "c6b4d8b340f74287b82ef928"
 #aim_experiment_name = "hello"
 
 [model]
-name = "llama3"
+name = "opt"
 flavor = "debugmodel"
-norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
+norm_type = "layernorm_bias"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
 # test tokenizer.model, for debug purpose only
 tokenizer_path = "./torchtitan/tokenizers/chemlactica-125m"
-init_weights = true
 
 [optimizer]
 name = "AdamW"
-lr = 8e-4
+lr = 1.4e-3
 
 [training]
-batch_size = 2
+batch_size = 1
 gradient_accumulation_steps = 1
 seq_len = 2048
-warmup_steps = 2  # lr scheduler warm up, normally 20% of the train steps
+warmup_steps = 500  # lr scheduler warm up, normally 20% of the train steps
 max_norm = 1.0  # grad norm clipping
-steps = 20
+steps = 50
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = true
+# dataset = "c4"  # supported datasets: c4_test (2K), c4 (177M)
 dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
+# dataset = "chemlactica_train"
 data_process_style="chemlactica_style"
 
-[validation]
-batch_size = 2
-eval_freq = 5
-enable_val = true
-dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
+[dataloader]
+num_workers = 1
 
 [experimental]
 pipeline_parallel_degree = 1
 enable_async_tensor_parallel = false
 
 [checkpoint]
-enable_checkpoint = false
-save_folder = "checkpoint"
-load_folder = "checkpoint"
+enable_checkpoint = true
 create_seed_checkpoint = false
+# load_folder = "facebook/galactica-125m"
+save_folder = "yerevann/chemlactica-125m"
 interval_type = "steps"
-interval = 5
+interval = 2000
 model_weights_only = false
 export_dtype = "float32"
 async_mode = "async_with_pinned_mem"  # ["disabled", "async", "async_with_pinned_mem"]
 
 [activation_checkpoint]
-mode = 'selective'  # ['none', 'selective', 'full']
+mode = 'none'  # ['none', 'selective', 'full']
 selective_ac_option = '2'  # 'int' = ac every positive int layer or 'op', ac based on ops policy
 
 [float8]
