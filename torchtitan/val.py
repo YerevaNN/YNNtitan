@@ -116,7 +116,7 @@ def validate(
         gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
 
         logger.info(
-            "context: val"
+            "context: val  "
             f"{color.cyan}step: {eval_state.step}  "
             f"{color.green}loss: {loss:7.4f}  "
             f"{color.yellow}memory: {gpu_mem_stats.max_reserved_gib:5.2f}GiB"

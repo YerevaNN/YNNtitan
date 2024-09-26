@@ -438,6 +438,7 @@ def main(job_config: Any):
                     logger,
                     metric_logger,
                     parallel_dims,
+                    gc_handler,
                     gpu_memory_monitor,
                     color,
                     train_state.step,

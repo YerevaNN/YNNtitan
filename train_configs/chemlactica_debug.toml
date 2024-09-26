@@ -46,6 +46,11 @@ dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M
 # dataset = "chemlactica_train"
 data_process_style="chemlactica_style"
 
+[validation]
+eval_freq = 10
+enable_val = true
+dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
+
 [dataloader]
 num_workers = 1
 
