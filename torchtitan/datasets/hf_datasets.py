@@ -34,10 +34,15 @@ from datasets.distributed import split_dataset_by_node
 # map from dataset name to a local directory, or
 # a dataset repository on the HF hub
 _supported_datasets = {
+    # train
     "c4_test": "test/assets/c4_test",
     "c4": "allenai/c4",
     "chemlactica_train_mini": "test/assets/chemlactica_train_mini",
-    "chemlactica_train": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form/train_rdkit_computed_rel+form"
+    "chemlactica_train": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form/train_rdkit_computed_rel+form",
+
+    # valid
+    "chemlactica_valid": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form",
+    "chemlactica_valid_mini": "test/assets/chemlactica_valid_mini"
 }
 
 _supported_data_processing_styles = {
@@ -118,13 +123,13 @@ class HuggingFaceDataset(IterableDataset, Stateful):
             ds = load_dataset(dataset_path, split="train")
         else:
             dataset_files = glob.glob(os.path.join(dataset_path, "*.jsonl"))
-            ds = load_dataset("text", data_files=dataset_files, split="train", streaming=True)
+            ds = load_dataset("text", data_files=dataset_files, split="train", streaming="valid" not in dataset_name)
+        
         try:
             data_processing_fn = _supported_data_processing_styles[data_processing_style]
         except KeyError as e:
             raise ValueError(f"Unsupported data processing style: {data_processing_style}")
-        # data_processing_fn = lambda x, e: str(x)
-
+        
         # TODO: support shuffling and checkpointing
         self.dataset_name = dataset_name
         self._data = split_dataset_by_node(ds, rank, world_size)
@@ -175,8 +180,8 @@ class HuggingFaceDataset(IterableDataset, Stateful):
 
             if not self.infinite:
                 logger.warning(f"Dataset {self.dataset_name} has run out of data")
-                self.should_iterate = False
-                return []
+                # self.should_iterate = False
+                # return []
                 break
             else:
                 # Reset offset for the next iteration

@@ -206,8 +206,6 @@ class JobConfig:
         )
         self.parser.add_argument(
             "--training.data_processing_style",
-            choices=["chemlactica_style"],
-            default="chemlactica_style",
             help="""
                 Specifies the method for processing data prior to tokenization.""",
         )
@@ -385,7 +383,7 @@ class JobConfig:
 
         # validation configs
         self.parser.add_argument(
-            "--validation.batch_size", type=int, default=0
+            "--validation.batch_size", type=int, default=None
         )
         self.parser.add_argument(
             "--validation.dataset", type=str, help="Dataset to use", default=None
@@ -399,10 +397,10 @@ class JobConfig:
             default=None,
         )
         self.parser.add_argument(
-            "--validation.eval_freq", type=int, default=None, help="How often to evaluate the model and log metrics to aim."
+            "--validation.valid_freq", type=int, default=1024, help="How often to evaluate the model and log metrics to aim."
         )
         self.parser.add_argument(
-            "--validation.enable_val", type=bool, default=False, help="Whether to do validation."
+            "--validation.enable_valid", type=bool, default=False, help="Whether to do validation."
         )
 
         # checkpointing configs

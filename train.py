@@ -36,7 +36,7 @@ from typing import Any
 
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
-def main(job_config: Any):
+def main(job_config: JobConfig):
     init_logger(job_config.logging.log_level)
     logger.info(f"Starting job: {job_config.job.description}")
 
@@ -77,7 +77,7 @@ def main(job_config: Any):
     tokenizer_type = model_name_to_tokenizer[model_name]
     tokenizer = build_tokenizer(tokenizer_type, job_config.model.tokenizer_path)
 
-    # build dataloader
+    # build training dataloader
     data_loader = build_hf_data_loader(
         job_config.training.dataset,
         job_config.training.dataset_path,
@@ -92,23 +92,33 @@ def main(job_config: Any):
         special_mode=job_config.dataloader.special_mode,
     )
 
+    if not job_config.validation.batch_size:
+        logger.info("Validation batch size not specified, training batch size is used.")
+        job_config.validation.batch_size = job_config.training.batch_size
+
+    # build validation dataloader
+    valid_data_loader = build_hf_data_loader(
+        job_config.validation.dataset,
+        job_config.validation.dataset_path,
+        job_config.training.data_processing_style,
+        tokenizer,
+        job_config.validation.batch_size,
+        job_config.training.seq_len,
+        dp_degree,
+        dp_rank,
+        False,
+        pin_memory=job_config.dataloader.pin_memory,
+        num_workers=job_config.dataloader.num_workers,
+        special_mode=job_config.dataloader.special_mode,
+    )
+
     # check the validation parameters
-    if not job_config.validation.dataset_path and not job_config.validation.dataset:
+    if not job_config.validation.dataset:
         raise ValueError("You didn't specify the validation dataset.")
-    if not job_config.validation.eval_freq:
-        logger.info("You didn't specify the frequency of evaluation. The default value is 1024.")
-    if job_config.validation.batch_size == None:
-        logger.info("You didn't specify the batch size for validation. The batch size for the training will be used instead.")
-    val_bs = (
-        job_config.validation.batch_size
-        if job_config.validation.batch_size != 0
-        else job_config.training.batch_size
-    )
-    eval_freq = (
-        job_config.validation.eval_freq
-        if job_config.validation.eval_freq
-        else 1024
-    )
+    # if not job_config.validation.valid_freq:
+    #     logger.info("You didn't specify the frequency of evaluation. The default value is 1024.")
+    # if job_config.validation.batch_size == None:
+    #     logger.info("You didn't specify the batch size for validation. The batch size for the training will be used instead.")
 
     # build model (using meta init)
     model_cls = model_name_to_cls[model_name]
@@ -414,27 +424,13 @@ def main(job_config: Any):
                 gpu_memory_monitor.reset_peak_stats()
 
             # log val metrics
-            if job_config.validation.enable_val and (
+            if job_config.validation.enable_valid and (
                 train_state.step == 0
-                or train_state.step % eval_freq == 0
+                or train_state.step % job_config.validation.valid_freq == 0
             ):
-                val_data_loader = build_hf_data_loader(
-                    job_config.validation.dataset,
-                    job_config.validation.dataset_path,
-                    job_config.training.data_processing_style,
-                    tokenizer,
-                    val_bs,
-                    job_config.training.seq_len,
-                    dp_degree,
-                    dp_rank,
-                    False,
-                    pin_memory=job_config.dataloader.pin_memory,
-                    num_workers=job_config.dataloader.num_workers,
-                    special_mode=job_config.dataloader.special_mode,
-                )
                 validate(
                     model,
-                    val_data_loader,
+                    valid_data_loader,
                     logger,
                     metric_logger,
                     parallel_dims,
@@ -448,6 +444,7 @@ def main(job_config: Any):
                     dp_mesh,
                     world_size,
                     job_config.experimental.enable_compiled_autograd,
+                    device
                 )
 
             checkpoint.save(
