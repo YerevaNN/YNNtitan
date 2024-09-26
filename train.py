@@ -199,6 +199,9 @@ def main(job_config: Any):
 
     train_state = TrainState()
 
+    metric_logger = build_metric_logger(job_config, parallel_dims)
+    metric_logger.log_hparams(job_config.args_dict)
+
     # load initial checkpoint
     checkpoint = CheckpointManager(
         dataloader=data_loader,
@@ -207,6 +210,7 @@ def main(job_config: Any):
         lr_schedulers=lr_schedulers.schedulers,
         states={"train_state": train_state},
         job_config=job_config,
+        experiment_hash=metric_logger.experiment_hash
     )
 
     if job_config.model_download_export.to_titan:
@@ -232,11 +236,6 @@ def main(job_config: Any):
         )
         logger.info("Created huggingface checkpoint")
         return
-
-    metric_logger = build_metric_logger(job_config, parallel_dims)
-    args, cmd_args = job_config.parse_args_from_command_line(job_config.args_list)
-    job_config_dict = job_config._args_to_two_level_dict(args)
-    metric_logger.log_hparams(job_config_dict)
 
     data_iterator = iter(data_loader)
 
@@ -270,17 +269,18 @@ def main(job_config: Any):
     ) as torch_profiler, maybe_enable_memory_snapshot(
         job_config, global_step=train_state.step
     ) as memory_profiler:
+        logger.debug("Got into profiling context")
         while train_state.step < job_config.training.steps:
-            logger.debug(f"starting train step: {train_state.step}")
             train_state.step += 1
             gc_handler.run(train_state.step)
+
             # get batch
             data_load_start = time.perf_counter()
             optimizers.zero_grad()
+            logger.debug("step")
 
             for _ in range(job_config.training.gradient_accumulation_steps):
                 batch = next(data_iterator, None)
-                logger.debug(f"fetched batch {train_state.step}")
                 if not batch:
                     force_finish_train = True
                     break
@@ -293,21 +293,21 @@ def main(job_config: Any):
                 logger.debug(f"before model forward {train_state.step}")
 
                 with train_context():
+                    logger.debug("enter context")
                     pred = model(input_ids)
                     loss = loss_fn(pred, labels)
-                    logger.debug(f"after loss {train_state.step}")
-
                     # pred.shape=(bs, seq_len, vocab_size)
                     # need to free to before bwd to avoid peaking memory
                     del pred
                     loss.backward()
-            logger.debug(f"after backward {train_state.step}")
+
+                for m in model_parts:
+                    torch.nn.utils.clip_grad_norm_(
+                        m.parameters(), job_config.training.max_norm, foreach=True
+                    )
+
             if force_finish_train:
                 break
-            for m in model_parts:
-                torch.nn.utils.clip_grad_norm_(
-                    m.parameters(), job_config.training.max_norm, foreach=True
-                )
 
             # sync float8 amaxes and scales
             float8_handler.sync_float8_amax_and_scale_history(model_parts)

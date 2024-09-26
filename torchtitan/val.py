@@ -37,6 +37,7 @@ def validate(
     logger: Logger,
     metric_logger: MetricLogger,
     parallel_dims: ParallelDims,
+    gc_handler: utils.GarbageCollection,
     gpu_memory_monitor: GPUMemoryMonitor,
     color: Union[utils.Color, utils.NoColor],
     train_step: int,  # for aim tracking of evaluation to be tracked correctly
@@ -77,9 +78,14 @@ def validate(
     eval_state.step = 0
     val_data_iterator = iter(data_loader)
     while True:
-        data_load_start = time.perf_counter()
-        batch = next(val_data_iterator, None)
+        eval_state.step += 1
+        gc_handler.run(eval_state.step)
 
+        # get batch
+        data_load_start = time.perf_counter()
+        logger.debug("validation step")
+
+        batch = next(val_data_iterator, None)
         if not batch:
             sync_val_end(end_of_validation_store, process_ids, dp_rank)
             break
@@ -91,6 +97,7 @@ def validate(
         labels = labels.cuda()
 
         with train_context(), torch.no_grad():
+            logger.debug("enter context")
             if end_of_validation_store.num_keys() > 1:
                 continue
             else:
@@ -98,7 +105,6 @@ def validate(
                 total_data_loading_time += time.perf_counter() - data_load_start
                 pred = model(input_ids)
                 loss = loss_fn(pred, labels)
-                eval_state.step += 1
                 del pred
 
         time_delta = time.perf_counter() - time_last_log
@@ -157,5 +163,5 @@ def validate(
         logger.info("no store file exists")
     del val_data_iterator, data_loader, end_of_validation_store
 
-    gc.collect()
+    gc_handler.run(gc_handler.gc_freq) # gc at the end
     model.train()
