@@ -31,7 +31,6 @@ from torchtitan.optimizer import build_lr_schedulers, build_optimizers
 from torchtitan.parallelisms import models_parallelize_fns, ParallelDims
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
 from torchtitan.validation import validate
-from typing import Any
 
 
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
@@ -96,29 +95,22 @@ def main(job_config: JobConfig):
         logger.info("Validation batch size not specified, training batch size is used.")
         job_config.validation.batch_size = job_config.training.batch_size
 
-    # build validation dataloader
-    valid_data_loader = build_hf_data_loader(
-        job_config.validation.dataset,
-        job_config.validation.dataset_path,
-        job_config.training.data_processing_style,
-        tokenizer,
-        job_config.validation.batch_size,
-        job_config.training.seq_len,
-        dp_degree,
-        dp_rank,
-        False,
-        pin_memory=job_config.dataloader.pin_memory,
-        num_workers=job_config.dataloader.num_workers,
-        special_mode=job_config.dataloader.special_mode,
-    )
-
-    # check the validation parameters
-    if not job_config.validation.dataset:
-        raise ValueError("You didn't specify the validation dataset.")
-    # if not job_config.validation.valid_freq:
-    #     logger.info("You didn't specify the frequency of evaluation. The default value is 1024.")
-    # if job_config.validation.batch_size == None:
-    #     logger.info("You didn't specify the batch size for validation. The batch size for the training will be used instead.")
+    if job_config.validation.enable_valid:
+        # build validation dataloader
+        valid_data_loader = build_hf_data_loader(
+            job_config.validation.dataset,
+            job_config.validation.dataset_path,
+            job_config.training.data_processing_style,
+            tokenizer,
+            job_config.validation.batch_size,
+            job_config.training.seq_len,
+            dp_degree,
+            dp_rank,
+            False,
+            pin_memory=job_config.dataloader.pin_memory,
+            num_workers=job_config.dataloader.num_workers,
+            special_mode=job_config.dataloader.special_mode,
+        )
 
     # build model (using meta init)
     model_cls = model_name_to_cls[model_name]

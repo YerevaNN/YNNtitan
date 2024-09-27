@@ -26,7 +26,7 @@ except ImportError as e:
 
 from torchtitan.tokenizers.tokenizer import Tokenizer
 from torchtitan.logging import logger
-from torchtitan.utils.dataset_utils import chemlactica_style_data_processing,create_fresh_file_store
+from torchtitan.utils.dataset_utils import chemlactica_style_data_processing
 
 from datasets import load_dataset
 from datasets.distributed import split_dataset_by_node
@@ -139,7 +139,6 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         self.infinite = infinite
         self.rank = rank
         self.world_size = world_size
-        self.should_iterate = True
 
         # variables for checkpointing
         self._sample_idx = 0
@@ -155,9 +154,6 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         max_buffer_token_len = 1 + self.seq_len
 
         while True:
-            if not self.should_iterate:
-                return []
-
             if self.special_mode == "yield_tensor":
                 logger.info("yielding tensor")
                 yield random_tensor, random_tensor
@@ -180,8 +176,6 @@ class HuggingFaceDataset(IterableDataset, Stateful):
 
             if not self.infinite:
                 logger.warning(f"Dataset {self.dataset_name} has run out of data")
-                # self.should_iterate = False
-                # return []
                 break
             else:
                 # Reset offset for the next iteration
