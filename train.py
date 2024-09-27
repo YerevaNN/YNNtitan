@@ -30,7 +30,7 @@ from torchtitan.models import (
 from torchtitan.optimizer import build_lr_schedulers, build_optimizers
 from torchtitan.parallelisms import models_parallelize_fns, ParallelDims
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
-from torchtitan.val import validate
+from torchtitan.validation import validate
 from typing import Any
 
 
