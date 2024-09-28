@@ -77,6 +77,7 @@ def main(job_config: JobConfig):
     tokenizer = build_tokenizer(tokenizer_type, job_config.model.tokenizer_path)
 
     # build training dataloader
+    representation_type = job_config.training.representation_type
     data_loader = build_hf_data_loader(
         job_config.training.dataset,
         job_config.training.dataset_path,
@@ -86,9 +87,10 @@ def main(job_config: JobConfig):
         job_config.training.seq_len,
         dp_degree,
         dp_rank,
-        pin_memory=job_config.dataloader.pin_memory,
-        num_workers=job_config.dataloader.num_workers,
-        special_mode=job_config.dataloader.special_mode,
+        representation_type,
+        pin_memory = job_config.dataloader.pin_memory,
+        num_workers = job_config.dataloader.num_workers,
+        special_mode = job_config.dataloader.special_mode,
     )
 
     if not job_config.validation.batch_size:
@@ -106,7 +108,8 @@ def main(job_config: JobConfig):
             job_config.training.seq_len,
             dp_degree,
             dp_rank,
-            False,
+            representation_type,
+            infinite=False,
             pin_memory=job_config.dataloader.pin_memory,
             num_workers=job_config.dataloader.num_workers,
             special_mode=job_config.dataloader.special_mode,
