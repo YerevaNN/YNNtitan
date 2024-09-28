@@ -17,8 +17,6 @@ log_freq = 1
 enable_color_printing = true
 enable_aim = true
 save_aim_folder = "aim"
-#aim_hash = "c6b4d8b340f74287b82ef928"
-#aim_experiment_name = "hello"
 
 [model]
 name = "opt"
@@ -32,8 +30,8 @@ name = "AdamW"
 lr = 1.4e-3
 
 [training]
-batch_size = 20
-gradient_accumulation_steps = 8
+batch_size = 16
+gradient_accumulation_steps = 16
 seq_len = 2048
 warmup_steps = 500  # lr scheduler warm up, normally 20% of the train steps
 max_norm = 1.0  # grad norm clipping
@@ -45,6 +43,14 @@ compile = true
 # dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
 dataset = "chemlactica_train"
 data_processing_style="chemlactica_style"
+
+[validation]
+valid_freq = 2000
+enable_valid = true
+dataset = "chemlactica_valid"  # supported datasets: chemlactica_valid_mini
+
+[dataloader]
+num_workers = 4
 
 [experimental]
 pipeline_parallel_degree = 1
