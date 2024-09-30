@@ -241,7 +241,7 @@ class FeedForward(nn.Module):
         ffn_dim_multiplier: Optional[float],
     ):
         super().__init__()
-        # hidden_dim = int(2 * hidden_dim / 3)
+        hidden_dim = int(2 * hidden_dim / 3)
         # custom dim factor multiplier
         if ffn_dim_multiplier is not None:
             hidden_dim = int(ffn_dim_multiplier * hidden_dim)
@@ -333,7 +333,7 @@ class TransformerBlock(nn.Module):
         self.feed_forward.init_weights(self.weight_init_std)
 
 
-class Transformer(nn.Module):
+class Llama3_2(nn.Module):
     """
     Transformer Module
 
@@ -377,7 +377,8 @@ class Transformer(nn.Module):
             model_args.norm_type, dim=model_args.dim, eps=model_args.norm_eps
         )
 
-        self.output = nn.Linear(model_args.dim, model_args.vocab_size, bias=False)
+        # self.output = nn.Linear(model_args.dim, model_args.vocab_size, bias=False)
+        self.output = None
         self.init_weights()
 
     def init_weights(self):
