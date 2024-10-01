@@ -29,7 +29,7 @@ def get_hf_llama3_state_dict_keys_mapping(num_layers: int):
         'tok_embeddings.weight': 'model.embed_tokens.weight',
         # add layer weight mappings here
         'norm.weight': 'model.norm.weight',
-        "output.weight": 'lm_head.weight',
+        # "output.weight": 'lm_head.weight',
     }
     for layer in range(num_layers):
         keys_mapping.update({

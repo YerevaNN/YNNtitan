@@ -36,7 +36,8 @@ llama3_configs = {
         n_layers=16,
         n_heads=32,
         n_kv_heads=8,
-        rope_theta=500000
+        rope_theta=500000,
+        share_embeddings=True
     ),
     "8B": ModelArgs(
         dim=4096,

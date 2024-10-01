@@ -35,6 +35,7 @@ class ModelArgs:
     # `False`, each uses the total number of transformer blocks
     depth_init: bool = True
     norm_type: str = "rmsnorm"
+    share_embeddings: bool = False
 
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0) -> torch.Tensor:
@@ -377,7 +378,10 @@ class Transformer(nn.Module):
             model_args.norm_type, dim=model_args.dim, eps=model_args.norm_eps
         )
 
-        self.output = nn.Linear(model_args.dim, model_args.vocab_size, bias=False)
+        self.output = None
+        if not self.model_args.share_embeddings:
+            self.output = nn.Linear(model_args.dim, model_args.vocab_size, bias=False)
+            
         self.init_weights()
 
     def init_weights(self):
@@ -439,6 +443,8 @@ class Transformer(nn.Module):
             h = layer(h, self.freqs_cis)
 
         h = self.norm(h) if self.norm else h
+        if self.model_args.share_embeddings:
+            return torch.matmul(h, self.tok_embeddings.weight.t()).float()
         output = self.output(h).float() if self.output else h
         return output
 
