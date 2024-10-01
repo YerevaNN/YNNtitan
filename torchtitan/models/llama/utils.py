@@ -4,6 +4,16 @@ from torchtitan.models.llama import Transformer
 from torchtitan.logging import logger
 
 
+# reverse_permute for sliced rotary
+def reverse_permute(w, n_heads, dim1, dim2):
+    return w.view(n_heads, 2, dim1 // n_heads // 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+
+
+# permute for sliced rotary
+def permute(w, n_heads, dim1, dim2): 
+    return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+
+
 def get_hf_llama3_state_dict_keys_mapping(num_layers: int):
     """
         Get a mapping between state dict keys of different implementations.
@@ -49,7 +59,19 @@ def download_llama3_weights(model: Transformer, weights_path: str, source: str, 
         corrected_state_dict = {}
         for key, value in keys_mapping.items():
             assert hf_state_dict[value].shape == model.state_dict()[key].shape
-            corrected_state_dict[key] = hf_state_dict[value]
+            if "self_attn.q_proj.weight" in value:
+                corrected_state_dict[key] = reverse_permute(
+                    hf_state_dict[value], model.model_args.n_heads,
+                    model.model_args.dim, model.model_args.dim
+                )
+            elif "self_attn.k_proj.weight" in value:
+                kv_dim = model.model_args.dim // (model.model_args.n_heads // model.model_args.n_kv_heads)
+                corrected_state_dict[key] = reverse_permute(
+                    hf_state_dict[value], model.model_args.n_kv_heads,
+                    kv_dim, model.model_args.dim
+                )
+            else:
+                corrected_state_dict[key] = hf_state_dict[value]
         
         with torch.device(model.freqs_cis.device):
             corrected_state_dict["freqs_cis"] = model._precompute_freqs_cis()
