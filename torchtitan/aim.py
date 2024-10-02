@@ -17,9 +17,9 @@ class AimLogger():
         capture_terminal_logs: Optional[bool] = True,
         run_name: Optional[str] = None,
         run_hash: Optional[str] = None,
-        train_metric_prefix: Optional[str] = 'train_',
-        val_metric_prefix: Optional[str] = 'val_',
-        test_metric_prefix: Optional[str] = 'test_',
+        train_metric_prefix: Optional[str] = 'train/',
+        val_metric_prefix: Optional[str] = 'val/',
+        test_metric_prefix: Optional[str] = 'test/',
     ):
         super().__init__()
 
@@ -73,14 +73,14 @@ class AimLogger():
             name = k
             context = {}
             if self._train_metric_prefix and name.startswith(self._train_metric_prefix):
-                name = name[len(self._train_metric_prefix) :]
                 context['subset'] = 'train'
+                name = name[len(self._train_metric_prefix) :]
             elif self._test_metric_prefix and name.startswith(self._test_metric_prefix):
-                name = name[len(self._test_metric_prefix) :]
                 context['subset'] = 'test'
+                name = name[len(self._test_metric_prefix) :]
             elif self._val_metric_prefix and name.startswith(self._val_metric_prefix):
-                name = name[len(self._val_metric_prefix) :]
                 context['subset'] = 'val'
+                name = name[len(self._val_metric_prefix) :]
             self.experiment.track(v, name=name, step=step, context=context)
 
     def finalize(self) -> None:

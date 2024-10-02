@@ -6,7 +6,6 @@
 
 import pickle
 from typing import Any, Dict, List, Optional
-from pathlib import Path
 import glob
 import os
 
@@ -26,7 +25,7 @@ except ImportError as e:
 
 from torchtitan.tokenizers.tokenizer import Tokenizer
 from torchtitan.logging import logger
-from torchtitan.utils.dataset_utils import chemlactica_style_data_processing,create_fresh_file_store
+from torchtitan.utils.dataset_utils import chemlactica_style_data_processing
 
 from datasets import load_dataset
 from datasets.distributed import split_dataset_by_node
@@ -34,10 +33,15 @@ from datasets.distributed import split_dataset_by_node
 # map from dataset name to a local directory, or
 # a dataset repository on the HF hub
 _supported_datasets = {
+    # train
     "c4_test": "test/assets/c4_test",
     "c4": "allenai/c4",
     "chemlactica_train_mini": "test/assets/chemlactica_train_mini",
-    "chemlactica_train": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form/train_rdkit_computed_rel+form"
+    "chemlactica_train": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form/train_rdkit_computed_rel+form",
+
+    # valid
+    "chemlactica_valid": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form",
+    "chemlactica_valid_mini": "test/assets/chemlactica_valid_mini"
 }
 
 _supported_data_processing_styles = {
@@ -93,7 +97,6 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         rank: int = 0,
         infinite: bool = False,
         special_mode = None,
-        store = None,
     ) -> None:
         # allow user to pass in a (local or HF hub) path to use unsupported datasets
         if dataset_name not in _supported_datasets:
@@ -120,13 +123,13 @@ class HuggingFaceDataset(IterableDataset, Stateful):
             ds = load_dataset(dataset_path, split="train")
         else:
             dataset_files = glob.glob(os.path.join(dataset_path, "*.jsonl"))
-            ds = load_dataset("text", data_files=dataset_files, split="train", streaming=True)
+            ds = load_dataset("text", data_files=dataset_files, split="train", streaming="valid" not in dataset_name)
+        
         try:
             data_processing_fn = _supported_data_processing_styles[data_processing_style]
         except KeyError as e:
             raise ValueError(f"Unsupported data processing style: {data_processing_style}")
-        # data_processing_fn = lambda x, e: str(x)
-
+        
         # TODO: support shuffling and checkpointing
         self.dataset_name = dataset_name
         self._data = split_dataset_by_node(ds, rank, world_size)
@@ -138,12 +141,6 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         self.world_size = world_size
         self.representation_type = representation_type
 
-        # for non sync communication between ranks
-        if not self.infinite and store:
-            self.store = store
-        else:
-            self.store = None
-    
         # variables for checkpointing
         self._sample_idx = 0
         self._all_tokens: List[int] = []
@@ -153,12 +150,6 @@ class HuggingFaceDataset(IterableDataset, Stateful):
 
         # debugging dataloader yielding
         self.special_mode = str(special_mode)
-
-    def _some_rank_finished(self) -> bool:
-        if not self.infinite and self.store.num_keys() > 1: # one key used for coordination, more than one means one of the ranks exhausted data
-            return True
-        else:
-            return False
 
     def __iter__(self):
         max_buffer_token_len = 1 + self.seq_len
@@ -171,8 +162,6 @@ class HuggingFaceDataset(IterableDataset, Stateful):
                 continue
 
             for sample_json in self._get_data_iter():
-                if self._some_rank_finished():
-                    break
                 sample_text = self.data_processing_fn(sample_json, self.rng, self.representation_type)
                 sample_tokens = self._tokenizer.encode(sample_text, bos=True, eos=True)
                 self._all_tokens.extend(sample_tokens)
@@ -187,9 +176,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
                     yield input, label
 
             if not self.infinite:
-                self.store.set(str(self.rank),"Done")
                 logger.warning(f"Dataset {self.dataset_name} has run out of data")
-                self.store.wait([str(k) for k in range(self.world_size)]) # making sure all ranks get to this point
                 break
             else:
                 # Reset offset for the next iteration
@@ -261,16 +248,9 @@ def build_hf_data_loader(
     pin_memory: bool = False,
     num_workers: int = 2,
     special_mode = None,
-    context = "train",
 ):
-    if not infinite:
-        store_identifier = f"rankstore_{context}_{dataset_name}"
-        data_completion_store = create_fresh_file_store(store_identifier,world_size)
-    else:
-        data_completion_store = None
-
     hf_ds = HuggingFaceDataset(
-        dataset_name, dataset_path, data_processing_style, tokenizer, representation_type, seq_len, world_size, rank, infinite, special_mode,store = data_completion_store
+        dataset_name, dataset_path, data_processing_style, tokenizer, representation_type, seq_len, world_size, rank, infinite, special_mode
     )
 
     return DPAwareDataLoader(rank, hf_ds, batch_size=batch_size, pin_memory=pin_memory, num_workers=num_workers)
