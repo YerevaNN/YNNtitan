@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from torchtitan.models.llama import llama2_configs, llama3_configs, Transformer
+from torchtitan.models.llama import llama2_configs, llama3_configs, Transformer, download_llama3_weights
 from torchtitan.models.opt import opt_configs, OPT, download_opt_weights, export_opt_weights
 
 models_config = {
@@ -26,7 +26,8 @@ model_name_to_tokenizer = {
 }
 
 model_name_to_weights_download_fns = {
-    "opt": download_opt_weights
+    "opt": download_opt_weights,
+    "llama3": download_llama3_weights
 }
 
 model_name_to_weights_export_fns = {

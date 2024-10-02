@@ -81,4 +81,6 @@ class CustomTokenizer:
 
     @property
     def padded_n_words(self):
+        if self.n_words % self.pad_to_multiple_of == 0:
+            return self.n_words
         return self._n_words + self.pad_to_multiple_of - self._n_words % self.pad_to_multiple_of
