@@ -29,12 +29,12 @@ name = "AdamW"
 lr = 1.0e-4
 
 [training]
-batch_size = 1
-gradient_accumulation_steps = 3
+batch_size = 10
+gradient_accumulation_steps = 1
 seq_len = 2048
 warmup_steps = 500  # lr scheduler warm up, normally 20% of the train steps
 max_norm = 1.0  # grad norm clipping
-steps = 10
+steps = 30
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = true
@@ -42,6 +42,9 @@ compile = true
 # dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
 dataset = "chemlactica_train"
 data_process_style="chemlactica_style"
+
+[dataloader]
+num_workers = 4
 
 [experimental]
 pipeline_parallel_degree = 1
