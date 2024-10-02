@@ -6,7 +6,7 @@ import os
 
 if __name__ == "__main__":
     executor = submitit.AutoExecutor(folder="~/slurm_jobs/titan/job_%j")
-    n_gpus = 8
+    n_gpus = 4
     executor.update_parameters(
         name="titan", timeout_min=3 * 24 * 60,
         gpus_per_node=n_gpus,
@@ -15,6 +15,11 @@ if __name__ == "__main__":
             "partition": "h100"
         }
     )
+
+    hparams = {
+        "optimizer.lr": ["4e-4", "3e-4", "2e-4", "1e-4"],
+        # "training.batch_size": []
+    }
 
     jobs = []
     with executor.batch():

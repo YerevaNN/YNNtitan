@@ -82,7 +82,7 @@ def delete_empty_tags(compound_json):
     return compound_json
 
 
-def generate_formatted_string(compound_json, rng, representation_type = "SMILES"):
+def generate_formatted_string(compound_json, rng, representation_type):
     key_value_pairs = []
     key = "SMILES"
     value = compound_json.get(key, "")
@@ -92,21 +92,21 @@ def generate_formatted_string(compound_json, rng, representation_type = "SMILES"
 
     if rng.integers(2) == 0:
         if value:
-            key_value_pairs.append(format_key_value(key, value, rng))
+            key_value_pairs.append(format_key_value(key, value, rng, representation_type))
             del compound_json[key]
 
     keys = list(compound_json.keys())
     rng.shuffle(keys)
 
     for key in keys:
-        key_value_pairs.append(format_key_value(key, compound_json[key], rng))
+        key_value_pairs.append(format_key_value(key, compound_json[key], rng, representation_type))
     compound_formatted_string = (
         "".join(key_value_pairs)
     )
     return compound_formatted_string
 
 
-def format_key_value(key, value, rng):
+def format_key_value(key, value, rng, representation_type):
     if key == "CID":
         return ""
     formatted_string = ""
@@ -116,7 +116,13 @@ def format_key_value(key, value, rng):
             value = rng.choice(value, size=10, replace=False, shuffle=False)
         for pair in value:
             rounded_sim = "{:.2f}".format(float(pair["similarity"]))
-            formatted_string += f"{SPECIAL_TAGS['similarity']['start']}{pair['SMILES']} {rounded_sim}{SPECIAL_TAGS['similarity']['end']}"  # noqa
+            mol_repr = pair["SMILES"]
+            if representation_type == "SAFE":
+                try:
+                    mol_repr = encode(mol_repr)
+                except:
+                    mol_repr = ""
+            formatted_string += f"{SPECIAL_TAGS['similarity']['start']}{mol_repr} {rounded_sim}{SPECIAL_TAGS['similarity']['end']}"  # noqa
     elif key == "experimental":
         for pair in value:
             formatted_string += f"[PROPERTY]{pair['PROPERTY_NAME']} {pair['PROPERTY_VALUE']}[/PROPERTY]"  # noqa
