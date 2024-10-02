@@ -15,7 +15,7 @@ save_memory_snapshot_folder = "memory_snapshot"
 [metrics]
 log_freq = 1
 enable_color_printing = true
-enable_aim = false
+enable_aim = true
 save_aim_folder = "aim"
 
 [model]
@@ -34,7 +34,7 @@ gradient_accumulation_steps = 12
 seq_len = 2048
 warmup_steps = 500  # lr scheduler warm up, normally 20% of the train steps
 max_norm = 1.0  # grad norm clipping
-steps = 36000
+steps = 20000
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = true
@@ -46,7 +46,7 @@ representation_type = "SAFE"
 
 [validation]
 valid_freq = 2000
-enable_valid = false
+enable_valid = true
 dataset = "chemlactica_valid"  # supported datasets: chemlactica_valid_mini
 
 [dataloader]

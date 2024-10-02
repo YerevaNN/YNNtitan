@@ -152,7 +152,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         self.special_mode = str(special_mode)
 
         # number of samples to log
-        self.number_of_samples_to_log = world_size * 2
+        self.number_of_samples_to_log = 10
 
     def __iter__(self):
         max_buffer_token_len = 1 + self.seq_len
@@ -168,6 +168,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
                 sample_text = self.data_processing_fn(sample_json["text"], self.rng, self.representation_type)
                 if self.number_of_samples_to_log > 0:
                     logger.info(f"Sample: {sample_text}")
+                    self.number_of_samples_to_log -= 1
                 sample_tokens = self._tokenizer.encode(sample_text, bos=True, eos=True)
                 self._all_tokens.extend(sample_tokens)
                 self._sample_idx += 1
