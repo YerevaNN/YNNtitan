@@ -17,8 +17,6 @@ log_freq = 1
 enable_color_printing = true
 enable_aim = true
 save_aim_folder = "aim"
-#aim_hash = "c6b4d8b340f74287b82ef928"
-#aim_experiment_name = "hello"
 
 [model]
 name = "opt"
@@ -44,7 +42,12 @@ compile = true
 # dataset = "c4"  # supported datasets: c4_test (2K), c4 (177M)
 dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
 # dataset = "chemlactica_train"
-data_process_style="chemlactica_style"
+data_processing_style="chemlactica_style"
+
+[validation]
+valid_freq = 25
+enable_valid = true
+dataset = "chemlactica_valid_mini"  # supported datasets: chemlactica_valid_mini
 
 [dataloader]
 num_workers = 1

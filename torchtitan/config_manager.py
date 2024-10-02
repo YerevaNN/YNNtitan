@@ -129,6 +129,7 @@ class JobConfig:
         )
         self.parser.add_argument(
             "--metrics.enable_aim",
+            default=False,
             action="store_true",
             help="Whether to log metrics to aim",
         )
@@ -205,13 +206,8 @@ class JobConfig:
         )
         self.parser.add_argument(
             "--training.data_processing_style",
-            choices=["chemlactica_style"],
-            default="chemlactica_style",
             help="""
                 Specifies the method for processing data prior to tokenization.""",
-        )
-        self.parser.add_argument(
-            "--training.batch_size", type=int, default=8, help="Batch size"
         )
         self.parser.add_argument(
             "--training.gradient_accumulation_steps",
@@ -388,6 +384,28 @@ class JobConfig:
             type=int,
             default=50,
             help="Python garbage control scheduling interval, in steps",
+        )
+
+        # validation configs
+        self.parser.add_argument(
+            "--validation.batch_size", type=int, default=None
+        )
+        self.parser.add_argument(
+            "--validation.dataset", type=str, help="Dataset to use", default=None
+        )
+        self.parser.add_argument(
+            "--validation.dataset_path",
+            type=str,
+            help="""
+                Path to the dataset for validation in the file system. If provided, data will be
+                loaded from this path instead of downloaded.""",
+            default=None,
+        )
+        self.parser.add_argument(
+            "--validation.valid_freq", type=int, default=1024, help="How often to evaluate the model and log metrics to aim."
+        )
+        self.parser.add_argument(
+            "--validation.enable_valid", type=bool, default=False, help="Whether to do validation."
         )
 
         # checkpointing configs

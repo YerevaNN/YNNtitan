@@ -6,7 +6,7 @@ description = "Llama 3 debug training"
 use_for_integration_test = true
 
 [profiling]
-enable_profiling = true
+enable_profiling = false
 save_traces_folder = "profile_trace"
 profile_freq = 10
 enable_memory_snapshot = false
@@ -26,19 +26,18 @@ flavor = "debugmodel"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
 # test tokenizer.model, for debug purpose only
 tokenizer_path = "./torchtitan/tokenizers/chemlactica-125m"
-init_weights = true
 
 [optimizer]
 name = "AdamW"
 lr = 8e-4
 
 [training]
-batch_size = 1
+batch_size = 2
 gradient_accumulation_steps = 1
 seq_len = 2048
 warmup_steps = 2  # lr scheduler warm up, normally 20% of the train steps
 max_norm = 1.0  # grad norm clipping
-steps = 30
+steps = 20
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = true
@@ -46,12 +45,18 @@ dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M
 data_process_style="chemlactica_style"
 representation_type="SAFE"
 
+[validation]
+batch_size = 2
+eval_freq = 5
+enable_val = true
+dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
+
 [experimental]
 pipeline_parallel_degree = 1
 enable_async_tensor_parallel = false
 
 [checkpoint]
-enable_checkpoint = true
+enable_checkpoint = false
 save_folder = "checkpoint"
 load_folder = "checkpoint"
 create_seed_checkpoint = false
