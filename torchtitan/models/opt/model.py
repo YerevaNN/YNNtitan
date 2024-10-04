@@ -35,6 +35,7 @@ class ModelArgs:
     # `False`, each uses the total number of transformer blocks
     depth_init: bool = True
     norm_type: str = "layernorm_bias"
+    share_embeddings = False
 
 
 def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -306,7 +307,10 @@ class OPT(nn.Module):
         self.norm = build_norm(
             model_args.norm_type, dim=model_args.dim, eps=model_args.norm_eps
         )
-        self.output = lambda x: F.linear(x, self.tok_embeddings.weight)
+        # self.output = lambda x: F.linear(x, self.tok_embeddings.weight)
+        self.output = None
+        if not self.model_args.share_embeddings:
+            self.output = nn.Linear(model_args.dim, model_args.vocab_size, bias=False)
 
         self.init_weights()
 
@@ -361,6 +365,8 @@ class OPT(nn.Module):
             h = layer(h)
 
         h = self.norm(h) if self.norm else h
+        if self.model_args.share_embeddings:
+            return torch.matmul(h, self.tok_embeddings.weight.t()).float()
         output = self.output(h).float() if self.output else h
         return output
 

@@ -152,7 +152,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         self.special_mode = str(special_mode)
 
         # number of samples to log
-        self.number_of_samples_to_log = 10
+        self.number_of_samples_to_log = 5
 
     def __iter__(self):
         max_buffer_token_len = 1 + self.seq_len

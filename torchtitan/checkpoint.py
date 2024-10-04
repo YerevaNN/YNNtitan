@@ -236,7 +236,11 @@ class CheckpointManager:
             for idx, lr_scheduler in enumerate(lr_schedulers):
                 self.states[f"lr_scheduler_{idx}"] = lr_scheduler
 
-        self.save_folder = os.path.join(job_config.job.dump_folder, os.path.join(ckpt_config.save_folder, experiment_hash))
+        
+        if job_config.model_download_export.to_hf or job_config.model_download_export.to_titan:
+            self.save_folder = os.path.join(job_config.job.dump_folder, ckpt_config.save_folder)
+        else:
+            self.save_folder = os.path.join(job_config.job.dump_folder, os.path.join(ckpt_config.save_folder, experiment_hash))
         self.load_folder = os.path.join(job_config.job.dump_folder, ckpt_config.load_folder)
         self.interval_type = (
             IntervalType.SECONDS

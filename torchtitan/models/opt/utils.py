@@ -2,7 +2,7 @@ from transformers import OPTForCausalLM
 from torchtitan.models.opt import OPT
 
 
-def get_hf_opt_state_dict_keys_mapping(num_layers: int):
+def get_hf_opt_state_dict_keys_mapping(num_layers: int, include_lm_head):
     """
         Get a mapping between state dict keys of different implementations.
 
@@ -19,8 +19,10 @@ def get_hf_opt_state_dict_keys_mapping(num_layers: int):
         # add layer weight mappings here
         'norm.weight': 'model.decoder.final_layer_norm.weight',
         'norm.bias': 'model.decoder.final_layer_norm.bias',
-        "output.weight": 'lm_head.weight',
+        # "output.weight": 'lm_head.weight',
     }
+    if include_lm_head:
+        keys_mapping['output.weight'] = 'lm_head.weight'
     for layer in range(num_layers):
         keys_mapping.update({
             f'layers.{layer}.attention.wq.weight': f'model.decoder.layers.{layer}.self_attn.q_proj.weight',
@@ -51,7 +53,8 @@ def download_opt_weights(model: OPT, weights_path: str, source: str, token_embed
     if source == "huggingface":
         hf_model = OPTForCausalLM.from_pretrained(weights_path)
         hf_model.resize_token_embeddings(new_num_tokens=token_embedding_size)
-        keys_mapping = get_hf_opt_state_dict_keys_mapping(model.n_layers)
+        include_lm_head = not model.model_args.share_embeddings
+        keys_mapping = get_hf_opt_state_dict_keys_mapping(model.n_layers, include_lm_head)
         hf_state_dict = hf_model.state_dict()
         corrected_state_dict = {}
         for key, value in keys_mapping.items():
@@ -73,13 +76,15 @@ def export_opt_weights(model: OPT, save_dir: str, token_embedding_size: int):
     """
         write docs
     """
-    hf_model = OPTForCausalLM.from_pretrained(map_n_layers_to_model_name(model.n_layers), tie_word_embeddings=False)
+    hf_model = OPTForCausalLM.from_pretrained(map_n_layers_to_model_name(model.n_layers))
     hf_model.resize_token_embeddings(new_num_tokens=token_embedding_size)
     keys_mapping = get_hf_opt_state_dict_keys_mapping(model.n_layers)
     state_dict = model.state_dict()
     corrected_state_dict = {}
     for key, value in keys_mapping.items():
         corrected_state_dict[value] = state_dict[key]
+
+    corrected_state_dict["lm_head.weight"] = state_dict["tok_embeddings.weight"]
     
     hf_model.load_state_dict(corrected_state_dict)
     hf_model.save_pretrained(save_dir)

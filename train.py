@@ -268,7 +268,6 @@ def main(job_config: JobConfig):
         f"(warmup {job_config.training.warmup_steps})"
         f"(decay {job_config.training.decay_steps})"
     )
-    force_finish_train = False
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
@@ -286,9 +285,6 @@ def main(job_config: JobConfig):
 
             for _ in range(job_config.training.gradient_accumulation_steps):
                 batch = next(data_iterator, None)
-                if not batch:
-                    force_finish_train = True
-                    break
                 input_ids, labels = batch
 
                 ntokens_since_last_log += labels.numel()
@@ -310,9 +306,6 @@ def main(job_config: JobConfig):
                     torch.nn.utils.clip_grad_norm_(
                         m.parameters(), job_config.training.max_norm, foreach=True
                     )
-
-            if force_finish_train:
-                break
 
             # sync float8 amaxes and scales
             float8_handler.sync_float8_amax_and_scale_history(model_parts)
