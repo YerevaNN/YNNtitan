@@ -8,9 +8,9 @@
 # Copyright (c) Meta Platforms, Inc. All Rights Reserved.
 
 from torchtitan.models.llama.model import ModelArgs, Transformer
-from torchtitan.models.llama.utils import download_llama3_weights
+from torchtitan.models.llama.utils import download_llama3_weights, export_llama3_weights
 
-__all__ = ["Transformer", download_llama3_weights]
+__all__ = ["Transformer", "download_llama3_weights", "export_llama3_weights"]
 
 llama2_configs = {
     "debugmodel": ModelArgs(dim=256, n_layers=8, n_heads=16),
