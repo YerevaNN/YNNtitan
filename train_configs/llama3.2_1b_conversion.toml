@@ -62,9 +62,9 @@ export_dtype = "float32"
 async_mode = "async_with_pinned_mem"  # ["disabled", "async", "async_with_pinned_mem"]
 
 [model_download_export]
-# to_titan = true
-# weights_source = "huggingface"
-to_hf = true
+to_titan = true
+weights_source = "huggingface"
+# to_hf = true
 
 [activation_checkpoint]
 mode = 'none'  # ['none', 'selective', 'full']
