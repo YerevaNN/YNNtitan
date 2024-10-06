@@ -79,7 +79,7 @@ def download_llama3_weights(model: Transformer, weights_path: str, source: str, 
             corrected_state_dict["freqs_cis"] = model._precompute_freqs_cis()
 
         model.load_state_dict(corrected_state_dict)
-        logger.info("Successfully loaded Llama 3 model to the titan model.")
+        logger.info("Successfully loaded Llama 3 model to titan model.")
 
         # from transformers import AutoTokenizer
         # tok = AutoTokenizer.from_pretrained(weights_path)
@@ -131,8 +131,7 @@ def export_llama3_weights(model: Transformer, save_dir: str, token_embedding_siz
         assert hf_model.state_dict()[value].shape == state_dict[key].shape
         corrected_state_dict["lm_head.weight"] = state_dict["tok_embeddings.weight"]
     
-    hf_model.load_state_dict(corrected_state_dict)
-
+    # hf_model.load_state_dict(corrected_state_dict)
     # from transformers import AutoTokenizer
     # tok = AutoTokenizer.from_pretrained(weights_path)
     # device = "cuda"
@@ -144,3 +143,4 @@ def export_llama3_weights(model: Transformer, save_dir: str, token_embedding_siz
     # logits = model(data.input_ids)
     # print(torch.allclose(hf_logits, logits, atol=1e-2))
     hf_model.save_pretrained(save_dir)
+    logger.info("Successfully exported Llama 3 model to huggingface model.")

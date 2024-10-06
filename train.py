@@ -226,7 +226,7 @@ def main(job_config: JobConfig):
         logger.info("Created titan checkpoint")
         return
 
-    checkpoint_loaded = checkpoint.load()
+    checkpoint_loaded = checkpoint.load(job_config.checkpoint.load_at_step)
 
     if job_config.model_download_export.to_hf:
         assert (
