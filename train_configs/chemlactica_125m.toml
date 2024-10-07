@@ -30,12 +30,12 @@ name = "AdamW"
 lr = 1.4e-3
 
 [training]
-batch_size = 16
-gradient_accumulation_steps = 16
+batch_size = 12
+gradient_accumulation_steps = 4
 seq_len = 2048
 warmup_steps = 500  # lr scheduler warm up, normally 20% of the train steps
 max_norm = 1.0  # grad norm clipping
-steps = 18000
+steps = 20
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = true
@@ -59,7 +59,10 @@ enable_async_tensor_parallel = false
 [checkpoint]
 enable_checkpoint = true
 create_seed_checkpoint = false
+# for pretraining
 load_folder = "facebook/galactica-125m"
+# for resuming the training
+# load_folder = "yerevann/chemlactica-125m/default"
 save_folder = "yerevann/chemlactica-125m"
 interval_type = "steps"
 interval = 2000

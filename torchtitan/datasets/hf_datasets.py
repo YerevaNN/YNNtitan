@@ -125,10 +125,10 @@ class HuggingFaceDataset(IterableDataset, Stateful):
             dataset_files = glob.glob(os.path.join(dataset_path, "*.jsonl"))
             ds = load_dataset("text", data_files=dataset_files, split="train", streaming="valid" not in dataset_name)
         
-        try:
-            data_processing_fn = _supported_data_processing_styles[data_processing_style]
-        except KeyError as e:
-            raise ValueError(f"Unsupported data processing style: {data_processing_style}")
+        # try:
+        data_processing_fn = _supported_data_processing_styles[data_processing_style]
+        # except KeyError as e:
+        #     raise ValueError(f"Unsupported data processing style: {data_processing_style}")
         
         # TODO: support shuffling and checkpointing
         self.dataset_name = dataset_name
@@ -151,6 +151,9 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         # debugging dataloader yielding
         self.special_mode = str(special_mode)
 
+        # number of samples to log
+        self.number_of_samples_to_log = 5
+
     def __iter__(self):
         max_buffer_token_len = 1 + self.seq_len
 
@@ -162,7 +165,10 @@ class HuggingFaceDataset(IterableDataset, Stateful):
                 continue
 
             for sample_json in self._get_data_iter():
-                sample_text = self.data_processing_fn(sample_json, self.rng, self.representation_type)
+                sample_text = self.data_processing_fn(sample_json["text"], self.rng, self.representation_type)
+                if self.number_of_samples_to_log > 0:
+                    logger.info(f"Sample: {sample_text}")
+                    self.number_of_samples_to_log -= 1
                 sample_tokens = self._tokenizer.encode(sample_text, bos=True, eos=True)
                 self._all_tokens.extend(sample_tokens)
                 self._sample_idx += 1
