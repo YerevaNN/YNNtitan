@@ -1,7 +1,9 @@
+
 from transformers import AutoModelForCausalLM
 import torch
 from torchtitan.models.llama import Transformer
 from torchtitan.logging import logger
+import os
 
 
 # reverse_permute for sliced rotary
@@ -101,7 +103,7 @@ def map_n_layers_to_model_name(n_layers):
     }[n_layers]
 
 
-def export_llama3_weights(model: Transformer, save_dir: str, token_embedding_size: int):
+def export_llama3_weights(model: Transformer, save_dir, token_embedding_size: int):
     """
         write docs
     """
@@ -131,7 +133,7 @@ def export_llama3_weights(model: Transformer, save_dir: str, token_embedding_siz
         assert hf_model.state_dict()[value].shape == state_dict[key].shape
         corrected_state_dict["lm_head.weight"] = state_dict["tok_embeddings.weight"]
     
-    # hf_model.load_state_dict(corrected_state_dict)
+    hf_model.load_state_dict(corrected_state_dict)
     # from transformers import AutoTokenizer
     # tok = AutoTokenizer.from_pretrained(weights_path)
     # device = "cuda"
@@ -143,4 +145,4 @@ def export_llama3_weights(model: Transformer, save_dir: str, token_embedding_siz
     # logits = model(data.input_ids)
     # print(torch.allclose(hf_logits, logits, atol=1e-2))
     hf_model.save_pretrained(save_dir)
-    logger.info("Successfully exported Llama 3 model to huggingface model.")
+    logger.info(f"Successfully exported Llama 3 model to huggingface model at {save_dir}.")

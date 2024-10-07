@@ -234,9 +234,7 @@ def main(job_config: JobConfig):
         ), "Must create seed-checkpoint using one gpu, to disable sharding"
         model_name_to_weights_export_fns[model_name](
             model,
-            save_dir=os.path.join(
-                job_config.job.dump_folder, job_config.checkpoint.save_folder
-            ),
+            save_dir=checkpoint._create_checkpoint_id(job_config.checkpoint.load_at_step, checkpoint.save_folder),
             token_embedding_size=model_config.vocab_size,
         )
         logger.info("Created huggingface checkpoint")
