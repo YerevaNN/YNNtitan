@@ -56,7 +56,7 @@ def download_llama3_weights(model: Transformer, weights_path: str, source: str, 
     """
     if source == "huggingface":
         hf_model = AutoModelForCausalLM.from_pretrained(weights_path)
-        # hf_model.resize_token_embeddings(new_num_tokens=token_embedding_size)
+        hf_model.resize_token_embeddings(new_num_tokens=token_embedding_size)
         include_lm_head = not model.model_args.share_embeddings
         keys_mapping = get_hf_llama3_state_dict_keys_mapping(model.n_layers, include_lm_head)
         hf_state_dict = hf_model.state_dict()
