@@ -1,6 +1,14 @@
 # Adapted from https://github.com/YerevaNN/ChemLactica/blob/main/chemlactica/utils/text_format_utils.py
 # All rights reserved
-from torchtitan.utils.safe import encode
+from torchtitan.logging import logger
+from functools import cache
+import safe
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
 
 SPECIAL_TAGS = {
     "SMILES": {"start": "[START_SMILES]", "end": "[END_SMILES]"},
@@ -21,7 +29,7 @@ SPECIAL_TAGS = {
     #     "end": "[/NUMROTATABLEBONDS]",
     # },
     # "NOCOUNT": {"start": "[NOCOUNT]", "end": "[/NOCOUNT]"},
-    "NHOHCOUNT": {"start": "[NHOHCOUNT]", "end": "[/NHOHCOUNT]"},
+    # "NHOHCOUNT": {"start": "[NHOHCOUNT]", "end": "[/NHOHCOUNT]"},
     # "RINGCOUNT": {"start": "[RINGCOUNT]", "end": "[/RINGCOUNT]"},
     # "HEAVYATOMCOUNT": {"start": "[HEAVYATOMCOUNT]", "end": "[/HEAVYATOMCOUNT]"},
     # "FRACTIONCSP3": {
@@ -75,6 +83,15 @@ SPECIAL_TAGS = {
 }
 
 
+@cache
+def get_special_tags(molecular_repr):
+    with open("torchtitan/tokenizers/special_tokens.toml", "rb") as f:
+        special_tokens = tomllib.load(f)
+    
+    tags_to_include = [molecular_repr, "related", "SAS", "WEIGHT", "TPSA", "CLOGP", "QED", "RINGCOUNT", "formula"]
+    return {prop: special_tokens[prop] for prop in tags_to_include}
+
+
 def delete_empty_tags(compound_json):
     for k, v in list(compound_json.items()):
         if v == [] or v == "":
@@ -82,13 +99,21 @@ def delete_empty_tags(compound_json):
     return compound_json
 
 
+def convert_representation(smiles, representation_type):
+    try:
+        return {
+            "SMILES": lambda x: x,
+            "SAFE": safe.encode
+        }[representation_type](smiles)
+    except Exception as e:
+        # logger.info(f"{e}. Could not encode molecule {smiles} with representation {representation_type}")
+        return smiles
+
+
 def generate_formatted_string(compound_json, rng, representation_type):
     key_value_pairs = []
     key = "SMILES"
     value = compound_json.get(key, "")
-    
-    if representation_type == "SAFE":
-        value = encode(value)
 
     if rng.integers(2) == 0:
         if value:
@@ -107,40 +132,36 @@ def generate_formatted_string(compound_json, rng, representation_type):
 
 
 def format_key_value(key, value, rng, representation_type):
+    if key == "SMILES":
+        key = representation_type
+
+    formatted_string = ""
     try:
-        if key == "CID":
-            return ""
-        formatted_string = ""
-        if key == "related":
-            if len(value) > 10:
-                # value = random.sample(value, 5)
-                value = rng.choice(value, size=10, replace=False, shuffle=False)
-            for pair in value:
-                rounded_sim = "{:.2f}".format(float(pair["similarity"]))
-                mol_repr = pair["SMILES"]
-                if representation_type == "SAFE":
-                    try:
-                        mol_repr = encode(mol_repr)
-                    except:
-                        mol_repr = ""
-                formatted_string += f"{SPECIAL_TAGS['similarity']['start']}{mol_repr} {rounded_sim}{SPECIAL_TAGS['similarity']['end']}"  # noqa
-        elif key == "experimental":
-            for pair in value:
-                formatted_string += f"{SPECIAL_TAGS['PROPERTY']['start']}{pair['PROPERTY_NAME']} {pair['PROPERTY_VALUE']}{SPECIAL_TAGS['PROPERTY']['end']}"  # noqa
-        elif key == "synonyms":
-            for val in value:
-                formatted_string += f"{SPECIAL_TAGS['synonym']['start']}{val['name']}{SPECIAL_TAGS['synonym']['end']}"  # noqa
-        else:    
-            if SPECIAL_TAGS[key].get("type") is float:
-                value = "{:.2f}".format(float(value))
-                assert len(value.split(".")[-1]) == 2
-            start = SPECIAL_TAGS[key]["start"]
-            end = SPECIAL_TAGS[key]["end"]
-            formatted_string = f"{start}{value}{end}"
+        special_tags = get_special_tags(representation_type)
+        if special_tags.get(key):
+            start_tag = special_tags[key]['start']
+            end_tag = special_tags[key]['end']
+            if key == representation_type:
+                formatted_string = f"{start_tag}{convert_representation(value, representation_type)}{end_tag}"
+            elif key == "related":
+                if len(value) > 10:
+                    value = rng.choice(value, size=10, replace=False, shuffle=False)
+                for pair in value:
+                    rounded_sim = "{:.2f}".format(float(pair["similarity"]))
+                    mol_repr = convert_representation(pair["SMILES"], representation_type)
+                    formatted_string += f"{start_tag}{mol_repr} {rounded_sim}{end_tag}"  # noqa
+            elif key == "experimental":
+                for pair in value:
+                    formatted_string += f"{start_tag}{pair['PROPERTY_NAME']} {pair['PROPERTY_VALUE']}{end_tag}"  # noqa
+            elif key == "synonyms":
+                for val in value:
+                    formatted_string += f"{start_tag}{val['name']}{end_tag}"  # noqa
+            else:
+                if special_tags[key].get("type") == "float":
+                    value = "{:.2f}".format(float(value))
+                    assert len(value.split(".")[-1]) == 2
+                formatted_string = f"{start_tag}{value}{end_tag}"
     except Exception as e:
-        # print(e)
-        # print("Failed to parse: ", key, value)
-        start = value = end = ""
-        return f"{start}{value}{end}"
-    
+        logger.info(e)
+
     return formatted_string
