@@ -20,10 +20,10 @@ SPECIAL_TAGS = {
     #     "start": "[NUMROTATABLEBONDS]",
     #     "end": "[/NUMROTATABLEBONDS]",
     # },
-    "NOCOUNT": {"start": "[NOCOUNT]", "end": "[/NOCOUNT]"},
+    # "NOCOUNT": {"start": "[NOCOUNT]", "end": "[/NOCOUNT]"},
     "NHOHCOUNT": {"start": "[NHOHCOUNT]", "end": "[/NHOHCOUNT]"},
-    "RINGCOUNT": {"start": "[RINGCOUNT]", "end": "[/RINGCOUNT]"},
-    "HEAVYATOMCOUNT": {"start": "[HEAVYATOMCOUNT]", "end": "[/HEAVYATOMCOUNT]"},
+    # "RINGCOUNT": {"start": "[RINGCOUNT]", "end": "[/RINGCOUNT]"},
+    # "HEAVYATOMCOUNT": {"start": "[HEAVYATOMCOUNT]", "end": "[/HEAVYATOMCOUNT]"},
     # "FRACTIONCSP3": {
     #     "start": "[FRACTIONCSP3]",
     #     "end": "[/FRACTIONCSP3]",
@@ -71,7 +71,7 @@ SPECIAL_TAGS = {
     # "VAR_VAL": {"start": "[VAR_VAL]", "end": "[/VAR_VAL]"},
     # "ASSAY_NAME": {"start": "[ASSAY_NAME]", "end": "[/ASSAY_NAME]"},
     # "ASSAY_DESC": {"start": "[ASSAY_DESC]", "end": "[/ASSAY_DESC]"},
-    # "formula": {"start": "[FORMULA]", "end": "[/FORMULA]"},
+    "formula": {"start": "[FORMULA]", "end": "[/FORMULA]"},
 }
 
 
