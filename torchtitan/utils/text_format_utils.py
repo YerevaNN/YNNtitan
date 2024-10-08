@@ -4,6 +4,7 @@ from torchtitan.logging import logger
 from functools import cache
 import safe
 
+import os
 try:
     import tomllib
 except ModuleNotFoundError:
@@ -85,7 +86,7 @@ SPECIAL_TAGS = {
 
 @cache
 def get_special_tags(molecular_repr):
-    with open("torchtitan/tokenizers/special_tokens.toml", "rb") as f:
+    with open(os.path.expanduser("~/YNNtitan/torchtitan/tokenizers/special_tokens.toml"), "rb") as f:
         special_tokens = tomllib.load(f)
     
     tags_to_include = [molecular_repr, "related", "SAS", "WEIGHT", "TPSA", "CLOGP", "QED", "RINGCOUNT", "formula"]

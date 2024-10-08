@@ -22,14 +22,14 @@ save_aim_folder = "aim"
 name = "llama3"
 flavor = "1B"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
-tokenizer_path = "meta-llama/Llama-3.2-1B"
+tokenizer_path = "torchtitan/tokenizers/Llama-3.2-chem-1B/"
 
 [optimizer]
 name = "AdamW"
 lr = 3.0e-4
 
 [training]
-batch_size = 10
+batch_size = 5
 gradient_accumulation_steps = 12
 seq_len = 2048
 warmup_steps = 500  # lr scheduler warm up, normally 20% of the train steps
