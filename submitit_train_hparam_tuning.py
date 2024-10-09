@@ -17,7 +17,8 @@ if __name__ == "__main__":
     )
 
     hparams = {
-        "optimizer.lr": ["9e-4", "6e-4", "3e-4", "1e-4"],
+        # "optimizer.lr": ["9e-4", "6e-4", "3e-4", "1e-4"],
+        "optimizer.lr": ["1e-4"],
     }
 
     jobs = []

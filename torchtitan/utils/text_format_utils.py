@@ -11,86 +11,29 @@ except ModuleNotFoundError:
     import tomli as tomllib
 
 
-SPECIAL_TAGS = {
-    "SMILES": {"start": "[START_SMILES]", "end": "[END_SMILES]"},
-    # "synonym": {"start": "[SYNONYM]", "end": "[/SYNONYM]"},
-    "RELATED": {"start": "[RELATED]", "end": "[/RELATED]"},
-    "similarity": {"start": "[SIMILAR]", "end": "[/SIMILAR]", "type": float},
-    # "PROPERTY": {"start": "[PROPERTY]", "end": "[/PROPERTY]"},
-    "SAS": {"start": "[SAS]", "end": "[/SAS]", "type": float},
-    "WEIGHT": {"start": "[WEIGHT]", "end": "[/WEIGHT]", "type": float},
-    "TPSA": {"start": "[TPSA]", "end": "[/TPSA]", "type": float},
-    "CLOGP": {"start": "[CLOGP]", "end": "[/CLOGP]", "type": float},
-    "QED": {"start": "[QED]", "end": "[/QED]", "type": float},
-    # "NUMHDONORS": {"start": "[NUMHDONORS]", "end": "[/NUMHDONORS]"},
-    # "NUMHACCEPTORS": {"start": "[NUMHACCEPTORS]", "end": "[/NUMHACCEPTORS]"},
-    # "NUMHETEROATOMS": {"start": "[NUMHETEROATOMS]", "end": "[/NUMHETEROATOMS]"},
-    # "NUMROTATABLEBONDS": {
-    #     "start": "[NUMROTATABLEBONDS]",
-    #     "end": "[/NUMROTATABLEBONDS]",
-    # },
-    # "NOCOUNT": {"start": "[NOCOUNT]", "end": "[/NOCOUNT]"},
-    # "NHOHCOUNT": {"start": "[NHOHCOUNT]", "end": "[/NHOHCOUNT]"},
-    # "RINGCOUNT": {"start": "[RINGCOUNT]", "end": "[/RINGCOUNT]"},
-    # "HEAVYATOMCOUNT": {"start": "[HEAVYATOMCOUNT]", "end": "[/HEAVYATOMCOUNT]"},
-    # "FRACTIONCSP3": {
-    #     "start": "[FRACTIONCSP3]",
-    #     "end": "[/FRACTIONCSP3]",
-    #     "type": float,
-    # },
-    # "NUMAROMATICRINGS": {
-    #     "start": "[NUMAROMATICRINGS]",
-    #     "end": "[/NUMAROMATICRINGS]",
-    # },
-    # "NUMSATURATEDRINGS": {
-    #     "start": "[NUMSATURATEDRINGS]",
-    #     "end": "[/NUMSATURATEDRINGS]",
-    # },
-    # "NUMAROMATICHETEROCYCLES": {
-    #     "start": "[NUMAROMATICHETEROCYCLES]",
-    #     "end": "[/NUMAROMATICHETEROCYCLES]",
-    # },
-    # "NUMAROMATICCARBOCYCLES": {
-    #     "start": "[NUMAROMATICCARBOCYCLES]",
-    #     "end": "[/NUMAROMATICCARBOCYCLES]",
-    # },
-    # "NUMSATURATEDHETEROCYCLES": {
-    #     "start": "[NUMSATURATEDHETEROCYCLES]",
-    #     "end": "[/NUMSATURATEDHETEROCYCLES]",
-    # },
-    # "NUMSATURATEDCARBOCYCLES": {
-    #     "start": "[NUMSATURATEDCARBOCYCLES]",
-    #     "end": "[/NUMSATURATEDCARBOCYCLES]",
-    # },
-    # "NUMALIPHATICRINGS": {
-    #     "start": "[NUMALIPHATICRINGS]",
-    #     "end": "[/NUMALIPHATICRINGS]",
-    # },
-    # "NUMALIPHATICHETEROCYCLES": {
-    #     "start": "[NUMALIPHATICHETEROCYCLES]",
-    #     "end": "[/NUMALIPHATICHETEROCYCLES]",
-    # },
-    # "NUMALIPHATICCARBOCYCLES": {
-    #     "start": "[NUMALIPHATICCARBOCYCLES]",
-    #     "end": "[/NUMALIPHATICCARBOCYCLES]",
-    # },
-    # "IUPAC": {"start": "[IUPAC]", "end": "[/IUPAC]"},
-    # "VAR_NAME": {"start": "[VAR_NAME]", "end": "[/VAR_NAME]"},
-    # "VAR_DESC": {"start": "[VAR_DESC]", "end": "[/VAR_DESC]"},
-    # "VAR_VAL": {"start": "[VAR_VAL]", "end": "[/VAR_VAL]"},
-    # "ASSAY_NAME": {"start": "[ASSAY_NAME]", "end": "[/ASSAY_NAME]"},
-    # "ASSAY_DESC": {"start": "[ASSAY_DESC]", "end": "[/ASSAY_DESC]"},
-    "formula": {"start": "[FORMULA]", "end": "[/FORMULA]"},
-}
+@cache
+def read_special_tags():
+    with open(os.path.expanduser("~/YNNtitan/torchtitan/tokenizers/special_tokens.toml"), "rb") as f:
+        special_tokens = tomllib.load(f)
+
+    return special_tokens
 
 
 @cache
-def get_special_tags(molecular_repr):
-    with open(os.path.expanduser("~/YNNtitan/torchtitan/tokenizers/special_tokens.toml"), "rb") as f:
-        special_tokens = tomllib.load(f)
-    
-    tags_to_include = [molecular_repr, "related", "SAS", "WEIGHT", "TPSA", "CLOGP", "QED", "RINGCOUNT", "formula"]
-    return {prop: special_tokens[prop] for prop in tags_to_include}
+def get_tags_split(molecular_repr):
+    included_properties = {molecular_repr, "related", "SAS", "WEIGHT", "TPSA", "CLOGP", "QED", "RINGCOUNT", "formula"}
+    all_properties = set(read_special_tags().keys())
+    return list(included_properties), list(all_properties.difference(included_properties))
+
+
+def sample_special_tags(molecular_repr, rng, sample_p=0.1):
+    included_properties, sampled_properties = get_tags_split(molecular_repr)
+
+    # sample the properties
+    do_sample = rng.random(len(sampled_properties)) < sample_p
+    sampled_properties = [p for i, p in enumerate(sampled_properties) if do_sample[i]]
+
+    return {key: read_special_tags()[key] for key in included_properties + sampled_properties}
 
 
 def delete_empty_tags(compound_json):
@@ -113,6 +56,8 @@ def convert_representation(smiles, representation_type):
 
 def generate_formatted_string(compound_json, rng, representation_type):
     key_value_pairs = []
+
+    # add smiles in the beginning 50% of the time
     key = "SMILES"
     value = compound_json.get(key, "")
 
@@ -138,7 +83,7 @@ def format_key_value(key, value, rng, representation_type):
 
     formatted_string = ""
     try:
-        special_tags = get_special_tags(representation_type)
+        special_tags = sample_special_tags(representation_type, rng)
         if special_tags.get(key):
             start_tag = special_tags[key]['start']
             end_tag = special_tags[key]['end']
