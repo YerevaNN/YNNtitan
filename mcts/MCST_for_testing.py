@@ -49,6 +49,7 @@ class Reasoning_MCTS_Node(MCTS_Node):
         max_depth: int,
         verbose: bool = False,
         node_value: float = None,
+        added_fragment: string = None,
         node_path: string = None,
         generator: Generator = None
     ) -> None:
@@ -62,6 +63,7 @@ class Reasoning_MCTS_Node(MCTS_Node):
         self.parent = parent  # if parent is None, then the node is the root
         self.children: List["Reasoning_MCTS_Node"] = []
         self.node_value = node_value
+        self.added_fragment = added_fragment
         self.node_path = node_path
         self.max_depth = max_depth
 
@@ -84,6 +86,7 @@ class Reasoning_MCTS_Node(MCTS_Node):
                     Reasoning_MCTS_Node(
                         parent=self,
                         node_value=prob,
+                        added_fragment = ans,
                         node_path=self.node_path + "." + ans,
                         max_depth=self.max_depth
                     )
@@ -93,6 +96,7 @@ class Reasoning_MCTS_Node(MCTS_Node):
                     Reasoning_MCTS_Node(
                         parent=self,
                         node_value=prob,
+                        added_fragment = ans,
                         node_path=ans,
                         max_depth=self.max_depth
                     )

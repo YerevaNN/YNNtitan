@@ -84,11 +84,14 @@ class MCTS_Searcher:
         path_1 = self._select(root_node, rollout_id)
         leaf = path_1[-1]
         verbose_print(f"==> Expanding node {leaf.id}...", self.verbose)
-        self._expand(leaf, rollout_id)
-        verbose_print(f"==> Simulating node {leaf.id}...", self.verbose)
-        path_2 = self._simulate(leaf, rollout_id)
-        verbose_print(f"==> Backpropagating...", self.verbose)
-        self._backpropagate(path_1 + path_2)
+        children = self._expand(leaf, rollout_id)
+        for child in children:
+            verbose_print(f"==> Simulating node {child.id}...", self.verbose)
+            path_2 = self._simulate(child, rollout_id)
+            verbose_print(f"==> Backpropagating...", self.verbose)
+            path_1.append(child)
+            self._backpropagate(path_1 + path_2)
+            path_1.pop()
         try:
             return path_2[-1]
         except:
@@ -117,13 +120,16 @@ class MCTS_Searcher:
     def _expand(self, node: MCTS_Node, rollout_id: int):
         "Update the `children` dict with the children of `node`"
         if node in self.explored_nodes:
-            return  # already expanded
+            print("You are trying to expand te node that already has been expanded.")
+            return []
 
         if node.is_terminal():
             self.explored_nodes.add(node)
-            return  # terminal node is non-expandable
+            print("Terminal node is non-expandable")
+            return []
 
         self.parent2children[node] = node.find_children(rollout_id)
+        return self.parent2children[node]
 
     def _simulate(self, node: MCTS_Node, rollout_id: int) -> List[MCTS_Node]:
         "Returns the reward for a random simulation (to completion) of `node`"
@@ -170,10 +176,11 @@ class MCTS_Searcher:
 
     def _compute_uct(self, parent_node: MCTS_Node, node: MCTS_Node, rollout_id: int):
         "Upper confidence bound for trees"
-        if parent_node is None:  # invalid UCT: the node is the root
-            raise ValueError("The node is the root.")
+        if parent_node is None:  # uct will be invalid
+            raise ValueError("UCT can't be calculated on the root node.")
         elif self.N[node] == 0:
-            raise ValueError("The node has not been explored yet.")
+            print("The node has not been explored yet.")
+            return -10
         else:
             weight = self._get_weight(rollout_id)
             return self.Q[node] / self.N[node] + weight * math.sqrt(math.log(self.N[parent_node]) / self.N[node])

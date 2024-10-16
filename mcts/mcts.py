@@ -30,9 +30,9 @@ def get_parser():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--verbose", action="store_true")
 
-    parser.add_argument("--num_rollouts", type=int, default=100000)
-    parser.add_argument("--num_children", type=int, default=77)
-    parser.add_argument("--max_depth_allowed", type=int, default=6)
+    parser.add_argument("--num_rollouts", type=int, default=100)
+    parser.add_argument("--num_children", type=int, default=100)
+    parser.add_argument("--max_depth_allowed", type=int, default=8)
     parser.add_argument("--mcts_exploration_weight", type=float, default=7)
     parser.add_argument("--mcts_weight_scheduler", choices=["exp", "lin", "const"], default="const")
     # parser.add_argument("--mcts_discount_factor", type=float, default=0.8)
