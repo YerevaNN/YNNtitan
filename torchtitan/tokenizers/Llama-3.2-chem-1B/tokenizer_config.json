@@ -2609,7 +2609,7 @@
       "special": true
     },
     "128326": {
-      "content": "[FORMULA]",
+      "content": "[CONFORMER]",
       "lstrip": false,
       "normalized": false,
       "rstrip": false,
@@ -2617,6 +2617,22 @@
       "special": true
     },
     "128327": {
+      "content": "[/CONFORMER]",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "128328": {
+      "content": "[FORMULA]",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "128329": {
       "content": "[/FORMULA]",
       "lstrip": false,
       "normalized": false,
