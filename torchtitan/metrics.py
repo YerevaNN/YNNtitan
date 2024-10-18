@@ -103,6 +103,9 @@ class MetricLogger:
                 self.writer = AimLogger(save_aim_folder, experiment=experiment_name)
             else:
                 self.writer = AimLogger(save_aim_folder)
+            self.experiment_hash = self.writer.experiment.hash
+        else:
+            self.experiment_hash = "default"
 
     def log(self, metrics: Dict[str, Any], step: int):
         if self.writer is not None:
@@ -116,11 +119,6 @@ class MetricLogger:
         if self.writer is not None:
             self.writer.experiment['hparams'] = config
 
-    @property
-    def experiment_hash(self):
-        if self.writer is None:
-            return "default"
-        return self.writer._run.hash
 
 def build_metric_logger(
     job_config: JobConfig, parallel_dims: ParallelDims
@@ -144,5 +142,10 @@ def build_metric_logger(
             f"Metrics logging active. Aim logs will be saved at /{save_aim_folder}"
         )
         enable_aim = torch.distributed.get_rank() == 0
-    return MetricLogger(job_config.metrics.aim_hash, job_config.metrics.aim_experiment_name, log_dir, save_aim_folder, enable_aim)
+    metric_logger = MetricLogger(job_config.metrics.aim_hash, job_config.metrics.aim_experiment_name, log_dir, save_aim_folder, enable_aim)
 
+    experiment_hash_list = [metric_logger.experiment_hash]
+    # broadcast aim experiment hash to all ranks
+    torch.distributed.broadcast_object_list(experiment_hash_list, src=0)
+    metric_logger.experiment_hash = experiment_hash_list[0]
+    return metric_logger

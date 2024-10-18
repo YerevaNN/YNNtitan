@@ -22,7 +22,7 @@ def load_jsonl_line(jsonl_line):
 
 def chemlactica_style_data_processing(sample_json, rng, representation_type):
     try:
-        sample_json = json.loads(sample_json["text"])
+        sample_json = json.loads(sample_json)
         compound = delete_empty_tags(sample_json)
         sample_json = generate_formatted_string(
             compound, rng, representation_type

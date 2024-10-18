@@ -424,6 +424,14 @@ class JobConfig:
             """,
         )
         self.parser.add_argument(
+            "--checkpoint.load_at_step",
+            type=int,
+            default=0,
+            help="""
+                The step to which to load.
+            """,
+        )
+        self.parser.add_argument(
             "--checkpoint.save_folder",
             type=str,
             help="""
