@@ -145,10 +145,10 @@ end = "[/ASSAY_NAME]"
 start = "[ASSAY_DESC]"
 end = "[/ASSAY_DESC]"
 
-[CONFORMER]
-start = "[CONFORMER]"
-end = "[/CONFORMER]"
-
 [formula]
 start = "[FORMULA]"
 end = "[/FORMULA]"
+
+[CONFORMER]
+start = "[CONFORMER]"
+end = "[/CONFORMER]"

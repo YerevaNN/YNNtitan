@@ -139,6 +139,7 @@ def main(job_config: JobConfig):
         model_name_to_weights_download_fns[model_name](
             model,
             weights_path=job_config.checkpoint.load_folder,
+            tokenizer=tokenizer.model,
             source=job_config.model_download_export.weights_source,
             token_embedding_size=model_config.vocab_size,
         )
@@ -235,6 +236,7 @@ def main(job_config: JobConfig):
         model_name_to_weights_export_fns[model_name](
             model,
             save_dir=checkpoint._create_checkpoint_id(job_config.checkpoint.load_at_step, checkpoint.save_folder),
+            tokenizer=tokenizer.model,
             token_embedding_size=model_config.vocab_size,
         )
         logger.info("Created huggingface checkpoint")

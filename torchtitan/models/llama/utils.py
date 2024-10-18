@@ -50,7 +50,24 @@ def get_hf_llama3_state_dict_keys_mapping(num_layers: int, include_lm_head: bool
     return keys_mapping
 
 
-def download_llama3_weights(model: Transformer, weights_path: str, source: str, token_embedding_size: int):
+def verify_logits_matching(
+        model: Transformer,
+        hf_model,
+        tokenizer,
+        atol: float,
+        prompts=["Hello world", "The capital of France is "]
+    ):
+    device = "cuda"
+    hf_model.to(device)
+    model.eval()
+    for prompt in prompts:
+        data = tokenizer(prompt, return_tensors="pt").to(device)
+        hf_logits = hf_model(**data).logits
+        logits = model(data.input_ids)
+        assert torch.allclose(hf_logits, logits, atol=atol)
+
+
+def download_llama3_weights(model: Transformer, weights_path: str, tokenizer, source: str, token_embedding_size: int):
     """
         write docs
     """
@@ -81,18 +98,8 @@ def download_llama3_weights(model: Transformer, weights_path: str, source: str, 
             corrected_state_dict["freqs_cis"] = model._precompute_freqs_cis()
 
         model.load_state_dict(corrected_state_dict)
+        verify_logits_matching(model=model, hf_model=hf_model, tokenizer=tokenizer, atol=1e-1)
         logger.info("Successfully loaded Llama 3 model to titan model.")
-
-        # from transformers import AutoTokenizer
-        # tok = AutoTokenizer.from_pretrained(weights_path)
-        # device = "cuda"
-        # hf_model.to(device)
-        # model.eval()
-        # text = "Hello world"
-        # data = tok(text, return_tensors="pt").to(device)
-        # hf_logits = hf_model(**data).logits
-        # logits = model(data.input_ids)
-        # print(torch.allclose(hf_logits, logits, atol=1e-4))
     else:
         raise NotImplemented
 
@@ -103,12 +110,13 @@ def map_n_layers_to_model_name(n_layers):
     }[n_layers]
 
 
-def export_llama3_weights(model: Transformer, save_dir, token_embedding_size: int):
+def export_llama3_weights(model: Transformer, save_dir, tokenizer, token_embedding_size: int):
     """
         write docs
     """
     weights_path = map_n_layers_to_model_name(model.n_layers)
     hf_model = AutoModelForCausalLM.from_pretrained(weights_path)
+    hf_model.resize_token_embeddings(new_num_tokens=token_embedding_size)
     include_lm_head = not model.model_args.share_embeddings
     keys_mapping = get_hf_llama3_state_dict_keys_mapping(model.n_layers, include_lm_head)
     state_dict = model.state_dict()
@@ -134,15 +142,12 @@ def export_llama3_weights(model: Transformer, save_dir, token_embedding_size: in
         corrected_state_dict["lm_head.weight"] = state_dict["tok_embeddings.weight"]
     
     hf_model.load_state_dict(corrected_state_dict)
-    # from transformers import AutoTokenizer
-    # tok = AutoTokenizer.from_pretrained(weights_path)
-    # device = "cuda"
-    # hf_model.to(device)
-    # model.eval()
-    # text = "[START_SMILES]"
-    # data = tok(text, return_tensors="pt").to(device)
-    # hf_logits = hf_model(**data).logits
-    # logits = model(data.input_ids)
-    # print(torch.allclose(hf_logits, logits, atol=1e-2))
+    verify_logits_matching(
+        model=model,
+        hf_model=hf_model,
+        tokenizer=tokenizer,
+        atol=1e-2,
+        prompts=["", "[QED]", "[SAFE]"]
+    )
     hf_model.save_pretrained(save_dir)
     logger.info(f"Successfully exported Llama 3 model to huggingface model at {save_dir}.")
