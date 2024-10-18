@@ -1,46 +1,76 @@
-# Licensed under the MIT license.
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, StoppingCriteria, StoppingCriteriaList
 
 import sys
-import random
-
 sys.path.append(".")
 
 import string
 from tqdm import trange
 from typing import List
 
-from MCTS_backbone import MCTS_Searcher, MCTS_Node
+from MCTS_backbone import MCTS_Searcher, MCTS_Node, final_results
+
+from rdkit import Chem
+from rdkit.Chem import rdMolDescriptors
 
 def verbose_print(s: str, verbose: bool):
     if verbose:
         print(s)
 
-def create_letter_to_number_dict():
-  """Creates a dictionary mapping letters to numbers."""
-  letters = ".abcdefghijklmnopqrstuvwxyz"
-  return {letter: i for i, letter in enumerate(letters)}
+class StopForFragment(StoppingCriteria):
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+    
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        last_token = self.tokenizer.decode(input_ids[0][-1])
+        return '.' in last_token or "[/SAFE]" == last_token
 
-letter_to_number_dict = create_letter_to_number_dict()
-
-
+class Stop(StoppingCriteria):
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+    
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        last_token = self.tokenizer.decode(input_ids[0][-1])
+        return "[/SAFE]" == last_token
+    
 class Generator:
     """Generator generates children nodes"""
 
-    def __init__(self, num_children) -> None:
+    def __init__(self, num_children, model_path, tokenizer_path) -> None:
         self.num_children = num_children
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+        self.model = AutoModelForCausalLM.from_pretrained(model_path)
+        self.stop_for_fragment = StopForFragment(self.tokenizer)
+        self.stop_for_molecule = Stop(self.tokenizer)
 
     def generate_answers(self, user_question: str = None):
-        """Right now generates 30 possible random strings each with equal probability"""
-        random_strings = []
-        for _ in range(self.num_children):
-            length = random.randint(1, 2)
-            random_string = ''.join(random.choice(string.ascii_lowercase) for _ in range(length))
-            random_strings.append(random_string)
-        # letters = "abcdefghijklmnopqrstuvwxyz"
-        # random_strings = [st for st in letters]
-        probs = self.num_children * [1.0/self.num_children]
-        return random_strings, probs
+        input_ids = self.tokenizer(user_question, return_tensors="pt")["input_ids"]
 
+        outputs = self.model.generate(
+            input_ids,
+            stopping_criteria=StoppingCriteriaList([self.stop_for_fragment]),
+            do_sample=True,
+            num_return_sequences=self.num_children,
+            max_new_tokens=1000
+        )
+
+        # only decode the newly generated part
+        decoded_outputs = [self.tokenizer.decode(output[len(input_ids[0]):], skip_special_tokens=True) for output in outputs]
+        cropped_answers = [decoded_output.split('.')[0] for decoded_output in decoded_outputs]
+
+        return cropped_answers
+
+    def generate_full_answer(self, user_question: str):
+        input_ids = self.tokenizer(user_question, return_tensors="pt")["input_ids"]
+        output = self.model.generate(
+            input_ids,
+            stopping_criteria=StoppingCriteriaList([self.stop_for_molecule]),
+            do_sample=True,
+            num_return_sequences=1,
+            max_new_tokens=1000
+        )
+        decoded_output = self.tokenizer.decode(output[0])
+        return decoded_output
 
 class Reasoning_MCTS_Node(MCTS_Node):
     def __init__(
@@ -48,7 +78,6 @@ class Reasoning_MCTS_Node(MCTS_Node):
         parent: "Reasoning_MCTS_Node",
         max_depth: int,
         verbose: bool = False,
-        node_value: float = None,
         added_fragment: string = None,
         node_path: string = None,
         generator: Generator = None
@@ -62,7 +91,6 @@ class Reasoning_MCTS_Node(MCTS_Node):
 
         self.parent = parent  # if parent is None, then the node is the root
         self.children: List["Reasoning_MCTS_Node"] = []
-        self.node_value = node_value
         self.added_fragment = added_fragment
         self.node_path = node_path
         self.max_depth = max_depth
@@ -79,15 +107,14 @@ class Reasoning_MCTS_Node(MCTS_Node):
     def _create_children(self):
         verbose_print(f"---- Generating children for node {self.id}...", self.verbose)
 
-        strings, probs = self.generator.generate_answers()
-        for ans, prob in zip(strings, probs):
-            if self.node_path:
+        answers = self.generator.generate_answers(self.node_path)
+        for ans in answers:
+            if self.node_path == "[SAFE]": # root node
                 self.children.append(
                     Reasoning_MCTS_Node(
                         parent=self,
-                        node_value=prob,
                         added_fragment = ans,
-                        node_path=self.node_path + "." + ans,
+                        node_path=self.node_path + ans,
                         max_depth=self.max_depth
                     )
                 )
@@ -95,9 +122,8 @@ class Reasoning_MCTS_Node(MCTS_Node):
                 self.children.append(
                     Reasoning_MCTS_Node(
                         parent=self,
-                        node_value=prob,
                         added_fragment = ans,
-                        node_path=ans,
+                        node_path=self.node_path + "." + ans,
                         max_depth=self.max_depth
                     )
                 )
@@ -113,33 +139,25 @@ class Reasoning_MCTS_Node(MCTS_Node):
         return self.children
 
     def is_terminal(self):
-        return self.depth >= self.max_depth
+        return self.node_path.endswith("[/SAFE]") or self.depth >= self.max_depth
 
     def calculate_reward(self):
-        ans = 0
-        for char in self.node_path:
-            ans += letter_to_number_dict[char]
-        return ans
-        # return self.node_value
+        molecule_str = self.safe
+        last_safe_index = molecule_str.rfind("[SAFE]")
+        print(molecule_str)
+        molecule_str = molecule_str[last_safe_index + 6:-7].strip() # remove [SAFE] and [/SAFE] tags
+        print(molecule_str)
 
-def find_valid_solution_nodes(root_node):
-    valid_solution_nodes = []
+        mol = Chem.MolFromSmiles(molecule_str)
+        if mol is None:
+            raise ValueError("Invalid molecule string {mol}")
 
-    def recursion(node:Reasoning_MCTS_Node):
-        if node.is_terminal():
-            valid_solution_nodes.append(node)
-            return
+        ring_count = mol.GetRingInfo().NumRings()
+        if not (3 <= ring_count <= 5):
+            return -1e6
 
-        if not node.children:
-            return
-
-        for child in node.children:
-            recursion(child)
-
-    recursion(root_node)
-
-    return valid_solution_nodes
-
+        tpsa = rdMolDescriptors.CalcTPSA(mol)
+        return tpsa
 
 def search_for_answers(args, generator: Generator = None, user_question: str = None):
     verbose_print(
@@ -156,19 +174,12 @@ def search_for_answers(args, generator: Generator = None, user_question: str = N
     root_node = Reasoning_MCTS_Node(
         parent=None,
         verbose=args.verbose,
-        node_value=0,
-        node_path="",
+        node_path="[SAFE]",
         generator=generator,
         max_depth=args.max_depth_allowed
     )
 
-    model_rollout_nodes = []
     for i in (pbar := trange(args.num_rollouts, disable=True, position=0)):
-        rollout_node = mcts_searcher.do_rollout(root_node, i)
-        model_rollout_nodes.append(rollout_node)
-    all_solution_nodes = find_valid_solution_nodes(root_node)
-    nodes_with_rewards = [(node.calculate_reward(), node) for node in all_solution_nodes]
-    nodes_with_rewards.sort(key=lambda x: x[0], reverse=True)
-    strings_with_rewards = [(node.node_path, reward) for reward, node in nodes_with_rewards]
+        mcts_searcher.do_rollout(root_node, i)
 
-    return strings_with_rewards
+    return final_results()

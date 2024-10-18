@@ -7,9 +7,11 @@ from collections import defaultdict
 from typing import Dict, List
 import math, random
 
-
 node_cnt = 0
+safe_with_rewards = []
 
+def final_results():
+    return safe_with_rewards
 
 def verbose_print(s: str, verbose: bool):
     if verbose:
@@ -47,10 +49,6 @@ class MCTS_Node(ABC):
     def calculate_reward(self):
         raise NotImplementedError
 
-    # @abstractmethod
-    # def skip_backprop(self):
-    #     raise NotImplementedError
-
 
 class MCTS_Searcher:
     "Monte Carlo tree searcher. First rollout the tree then choose a move."
@@ -62,11 +60,11 @@ class MCTS_Searcher:
         num_rollouts: int,
         verbose: bool = False,
     ):
-        self.Q: Dict[MCTS_Node, float] = defaultdict(lambda: 0.0)  # total reward of each node
-        self.N: Dict[MCTS_Node, int] = defaultdict(lambda: 0)  # total visit count for each node
+        self.Q: Dict[MCTS_Node, float] = defaultdict(lambda: 0.0)  # reward
+        self.N: Dict[MCTS_Node, int] = defaultdict(lambda: 0)  # visit count
         self.parent2children: Dict[MCTS_Node, List[MCTS_Node]] = dict()  # children of each node
 
-        #! explored = expanded + simulated, i.e. has seen terminal at least once, i.e. we can calculate its UCT value, i.e. has Q and N
+        # explored = expanded + simulated, i.e. has seen terminal at least once, i.e. we can calculate its UCT value, i.e. has Q and N
         self.explored_nodes = set()
 
         self.exploration_weight = exploration_weight
@@ -87,15 +85,9 @@ class MCTS_Searcher:
         children = self._expand(leaf, rollout_id)
         for child in children:
             verbose_print(f"==> Simulating node {child.id}...", self.verbose)
-            path_2 = self._simulate(child, rollout_id)
-            verbose_print(f"==> Backpropagating...", self.verbose)
-            path_1.append(child)
-            self._backpropagate(path_1 + path_2)
-            path_1.pop()
-        try:
-            return path_2[-1]
-        except:
-            return path_1[-1]
+            reward = self._simulate(child)
+            verbose_print(f"==> Backpropagating the reward {reward}...", self.verbose)
+            self._backpropagate(reward, path_1 + [child])
 
     def _select(self, node: MCTS_Node, rollout_id: int) -> List[MCTS_Node]:
         "Find an unexplored descendent of `node`"
@@ -131,25 +123,16 @@ class MCTS_Searcher:
         self.parent2children[node] = node.find_children(rollout_id)
         return self.parent2children[node]
 
-    def _simulate(self, node: MCTS_Node, rollout_id: int) -> List[MCTS_Node]:
-        "Returns the reward for a random simulation (to completion) of `node`"
-        path = []
-        cur_node = node
-        while True:
-            if cur_node.is_terminal():
-                self.explored_nodes.add(node)
-                return path
+    def _simulate(self, node: MCTS_Node) -> List[MCTS_Node]:
+        "Returns the reward for the completion of `node`"
+        node.safe = node.generator.generate_full_answer("[SAFE]" + node.node_path + ".") # we can put . in the end, because if the node_path was a full molecule, we wouldn't have called simulate on it 
+        reward = node.calculate_reward()
+        global safe_with_rewards
+        safe_with_rewards.append((node.safe, reward))
+        return reward
 
-            if cur_node not in self.parent2children.keys():
-                self.parent2children[cur_node] = cur_node.find_children(rollout_id)
-
-            cur_node = random.choice(self.parent2children[cur_node])  # randomly select a child
-            path.append(cur_node)
-
-    def _backpropagate(self, path: List[MCTS_Node]):
+    def _backpropagate(self, reward, path: List[MCTS_Node]):
         "Send the reward back up to the ancestors of the leaf"
-        leaf = path[-1]
-        reward = leaf.calculate_reward()
         for node in reversed(path):
             self.Q[node] += reward
             self.N[node] += 1
