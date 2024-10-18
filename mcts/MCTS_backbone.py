@@ -58,6 +58,7 @@ class MCTS_Searcher:
         exploration_weight: float,
         weight_scheduler: str,
         num_rollouts: int,
+        uct_algo: str,
         verbose: bool = False,
     ):
         self.Q: Dict[MCTS_Node, float] = defaultdict(lambda: 0.0)  # reward
@@ -71,6 +72,8 @@ class MCTS_Searcher:
         self.weight_scheduler = weight_scheduler
         self.num_rollouts = num_rollouts
 
+        self.uct_algo = uct_algo
+        
         self.verbose = verbose
 
         global node_cnt
@@ -134,7 +137,10 @@ class MCTS_Searcher:
     def _backpropagate(self, reward, path: List[MCTS_Node]):
         "Send the reward back up to the ancestors of the leaf"
         for node in reversed(path):
-            self.Q[node] += reward
+            if(self.uct_algo == "mean"):
+                self.Q[node] += reward
+            elif(self.uct_algo == "max"):
+                self.Q[node] = max(self.Q[node], reward) 
             self.N[node] += 1
             self.explored_nodes.add(node)
 
@@ -166,4 +172,9 @@ class MCTS_Searcher:
             return -10
         else:
             weight = self._get_weight(rollout_id)
-            return self.Q[node] / self.N[node] + weight * math.sqrt(math.log(self.N[parent_node]) / self.N[node])
+            uct = 0
+            if(self.uct_algo == "mean"):
+                uct = self.Q[node] / self.N[node] + weight * math.sqrt(math.log(self.N[parent_node]) / self.N[node])
+            elif(self.uct_algo == "max"):
+                uct = self.Q[node] + weight * math.sqrt(math.log(self.N[parent_node]) / self.N[node])
+            return uct

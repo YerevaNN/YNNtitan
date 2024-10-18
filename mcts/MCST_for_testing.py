@@ -169,6 +169,7 @@ def search_for_answers(args, generator: Generator = None, user_question: str = N
         weight_scheduler=args.mcts_weight_scheduler,
         num_rollouts=args.num_rollouts,
         verbose=args.verbose,
+        uct_algo=args.uct_algo
     )
 
     root_node = Reasoning_MCTS_Node(

@@ -34,6 +34,8 @@ def get_parser():
     parser.add_argument("--mcts_exploration_weight", type=float, default=7)
     parser.add_argument("--mcts_weight_scheduler", choices=["exp", "lin", "const"], default="const")
 
+    parser.add_argument("--uct_algo", type=str, choices=["max", "mean"], default="mean")
+
     parser.add_argument("--model_path", default="/nfs/dgx/raid/chem/titan_outputs/hf/yerevann/Llama-3.2-1B/0e17dae1afc943d8a9bfed83/step-4000")
     parser.add_argument("--tokenizer_path", default="/nfs/dgx/raid/chem/titan_outputs/tokenizers/Llama-3.2-chem-1B-v0")
 
