@@ -139,6 +139,7 @@ def main(job_config: JobConfig):
         model_name_to_weights_download_fns[model_name](
             model,
             weights_path=job_config.checkpoint.load_folder,
+            tokenizer=tokenizer.model,
             source=job_config.model_download_export.weights_source,
             token_embedding_size=model_config.vocab_size,
         )
@@ -226,7 +227,7 @@ def main(job_config: JobConfig):
         logger.info("Created titan checkpoint")
         return
 
-    checkpoint_loaded = checkpoint.load()
+    checkpoint_loaded = checkpoint.load(job_config.checkpoint.load_at_step)
 
     if job_config.model_download_export.to_hf:
         assert (
@@ -234,9 +235,8 @@ def main(job_config: JobConfig):
         ), "Must create seed-checkpoint using one gpu, to disable sharding"
         model_name_to_weights_export_fns[model_name](
             model,
-            save_dir=os.path.join(
-                job_config.job.dump_folder, job_config.checkpoint.save_folder
-            ),
+            save_dir=checkpoint._create_checkpoint_id(job_config.checkpoint.load_at_step, checkpoint.save_folder),
+            tokenizer=tokenizer.model,
             token_embedding_size=model_config.vocab_size,
         )
         logger.info("Created huggingface checkpoint")
@@ -268,7 +268,6 @@ def main(job_config: JobConfig):
         f"(warmup {job_config.training.warmup_steps})"
         f"(decay {job_config.training.decay_steps})"
     )
-    force_finish_train = False
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
@@ -286,9 +285,6 @@ def main(job_config: JobConfig):
 
             for _ in range(job_config.training.gradient_accumulation_steps):
                 batch = next(data_iterator, None)
-                if not batch:
-                    force_finish_train = True
-                    break
                 input_ids, labels = batch
 
                 ntokens_since_last_log += labels.numel()
@@ -310,9 +306,6 @@ def main(job_config: JobConfig):
                     torch.nn.utils.clip_grad_norm_(
                         m.parameters(), job_config.training.max_norm, foreach=True
                     )
-
-            if force_finish_train:
-                break
 
             # sync float8 amaxes and scales
             float8_handler.sync_float8_amax_and_scale_history(model_parts)
@@ -390,6 +383,7 @@ def main(job_config: JobConfig):
                     "train/loss_metrics/global_max_perplexity": global_max_perplexity,
                     "train/wps": wps,
                     "train/mfu(%)": mfu,
+                    "lr": lr_schedulers.last_lr,
                     "train/time_metrics/end_to_end(s)": time_end_to_end,
                     "train/time_metrics/data_loading(s)": time_data_loading,
                     "train/time_metrics/data_loading(%)": time_data_loading_pct,
@@ -409,7 +403,8 @@ def main(job_config: JobConfig):
                     f"{color.yellow}memory: {gpu_mem_stats.max_reserved_gib:5.2f}GiB"
                     f"({gpu_mem_stats.max_reserved_pct:.2f}%)  "
                     f"{color.blue}wps: {round(wps):,}  "
-                    f"{color.magenta}mfu: {mfu:.2f}%{color.reset}"
+                    f"{color.magenta}mfu: {mfu:.2f}%{color.reset}  "
+                    f"{color.red}lr: {lr_schedulers.last_lr:.3e}{color.reset}"
                 )
 
                 losses_since_last_log.clear()
