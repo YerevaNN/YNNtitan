@@ -4,10 +4,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import pickle
-from typing import Any, Dict, List, Optional
 import glob
 import os
+import pickle
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -23,8 +23,8 @@ except ImportError as e:
         "pip3 install --pre torchdata --index-url https://download.pytorch.org/whl/nightly"
     ) from e
 
-from torchtitan.tokenizers.tokenizer import Tokenizer
 from torchtitan.logging import logger
+from torchtitan.tokenizers.tokenizer import Tokenizer
 from torchtitan.utils.dataset_utils import chemlactica_style_data_processing
 
 from datasets import load_dataset
@@ -38,10 +38,9 @@ _supported_datasets = {
     "c4": "allenai/c4",
     "chemlactica_train_mini": "test/assets/chemlactica_train_mini",
     "chemlactica_train": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form/train_rdkit_computed_rel+form",
-
     # valid
     "chemlactica_valid": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form",
-    "chemlactica_valid_mini": "test/assets/chemlactica_valid_mini"
+    "chemlactica_valid_mini": "test/assets/chemlactica_valid_mini",
 }
 
 _supported_data_processing_styles = {
@@ -57,7 +56,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         dataset_path (Optional[str]):
             Path to the dataset in the file system. If provided, data will be loaded
             from this path instead of downloaded.
-        data_processing_style (str): name of the data process style    
+        data_processing_style (str): name of the data process style
         tokenizer (Tokenizer):
             Tokenizer used to encode data. Tokenize must implement an `encode` and `decode` method.
         seq_len (int): max sequence length
@@ -79,7 +78,8 @@ class HuggingFaceDataset(IterableDataset, Stateful):
     }
 
     Example use (c4):
-    >>> ds = HuggingFaceDataset(dataset_name="c4", dataset_path=None, data_processing_style="chemlactica_style", tokenizer=tokenizer)
+    >>> ds = HuggingFaceDataset(dataset_name="c4", dataset_path=None,
+    data_processing_style="chemlactica_style", tokenizer=tokenizer)
     >>> for batch in Dataloader(ds, batch_size=8):
             print(f"Batch size: {len(batch)}")
         Batch size: 8
@@ -96,7 +96,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         world_size: int = 1,
         rank: int = 0,
         infinite: bool = False,
-        special_mode = None,
+        special_mode=None,
     ) -> None:
         # allow user to pass in a (local or HF hub) path to use unsupported datasets
         if dataset_name not in _supported_datasets:
@@ -123,13 +123,18 @@ class HuggingFaceDataset(IterableDataset, Stateful):
             ds = load_dataset(dataset_path, split="train")
         else:
             dataset_files = glob.glob(os.path.join(dataset_path, "*.jsonl"))
-            ds = load_dataset("text", data_files=dataset_files, split="train", streaming="valid" not in dataset_name)
-        
+            ds = load_dataset(
+                "text",
+                data_files=dataset_files,
+                split="train",
+                streaming="valid" not in dataset_name,
+            )
+
         # try:
         data_processing_fn = _supported_data_processing_styles[data_processing_style]
         # except KeyError as e:
         #     raise ValueError(f"Unsupported data processing style: {data_processing_style}")
-        
+
         # TODO: support shuffling and checkpointing
         self.dataset_name = dataset_name
         self._data = split_dataset_by_node(ds, rank, world_size)
@@ -159,35 +164,42 @@ class HuggingFaceDataset(IterableDataset, Stateful):
 
         while True:
             if self.special_mode == "yield_tensor":
-                logger.info("yielding tensor")
-                yield random_tensor, random_tensor
-                random_tensor = torch.randint(low=1, high=2, size=(self.seq_len,))
-                continue
-
-            for sample_json in self._get_data_iter():
-                sample_text = self.data_processing_fn(sample_json["text"], self.rng, self.representation_type)
                 if self.number_of_samples_to_log > 0:
-                    logger.info(f"Sample: {sample_text}")
+                    logger.info("yielding tensor")
                     self.number_of_samples_to_log -= 1
-                sample_tokens = self._tokenizer.encode(sample_text, bos=True, eos=True)
-                self._all_tokens.extend(sample_tokens)
-                self._sample_idx += 1
-
-                while len(self._all_tokens) >= max_buffer_token_len:
-                    x = torch.LongTensor(self._all_tokens[:max_buffer_token_len])
-                    # update tokens to the remaining tokens
-                    self._all_tokens = self._all_tokens[max_buffer_token_len:]
-                    input = x[:-1]
-                    label = x[1:]
-                    yield input, label
-
-            if not self.infinite:
-                logger.warning(f"Dataset {self.dataset_name} has run out of data")
-                break
+                random_tensor = torch.randint(
+                    low=1, high=2, size=(max_buffer_token_len,)
+                )
+                yield random_tensor[:-1], random_tensor[1:]
             else:
-                # Reset offset for the next iteration
-                self._sample_idx = 0
-                logger.warning(f"Dataset {self.dataset_name} is being re-looped")
+                for sample_json in self._get_data_iter():
+                    sample_text = self.data_processing_fn(
+                        sample_json["text"], self.rng, self.representation_type
+                    )
+                    if self.number_of_samples_to_log > 0:
+                        logger.info(f"Sample: {sample_text}")
+                        self.number_of_samples_to_log -= 1
+                    sample_tokens = self._tokenizer.encode(
+                        sample_text, bos=True, eos=True
+                    )
+                    self._all_tokens.extend(sample_tokens)
+                    self._sample_idx += 1
+
+                    while len(self._all_tokens) >= max_buffer_token_len:
+                        x = torch.LongTensor(self._all_tokens[:max_buffer_token_len])
+                        # update tokens to the remaining tokens
+                        self._all_tokens = self._all_tokens[max_buffer_token_len:]
+                        input = x[:-1]
+                        label = x[1:]
+                        yield input, label
+
+                if not self.infinite:
+                    logger.warning(f"Dataset {self.dataset_name} has run out of data")
+                    break
+                else:
+                    # Reset offset for the next iteration
+                    self._sample_idx = 0
+                    logger.warning(f"Dataset {self.dataset_name} is being re-looped")
 
     def _get_data_iter(self):
         if self._sample_idx == 0:
@@ -218,7 +230,15 @@ class DPAwareDataLoader(StatefulDataLoader, Stateful):
     """
     A wrapper around the StatefulDataLoader that ensures that the state is stored only once per DP rank.
     """
-    def __init__(self, dp_rank: int, hf_ds: IterableDataset, batch_size: int, pin_memory: bool, num_workers: int):
+
+    def __init__(
+        self,
+        dp_rank: int,
+        hf_ds: IterableDataset,
+        batch_size: int,
+        pin_memory: bool,
+        num_workers: int,
+    ):
         super().__init__(hf_ds, batch_size, num_workers=num_workers)
         self._dp_rank = dp_rank
         self._rank_id = f"dp_rank_{dp_rank}"
@@ -253,10 +273,25 @@ def build_hf_data_loader(
     infinite: bool = True,
     pin_memory: bool = False,
     num_workers: int = 2,
-    special_mode = None,
+    special_mode=None,
 ):
     hf_ds = HuggingFaceDataset(
-        dataset_name, dataset_path, data_processing_style, tokenizer, representation_type, seq_len, world_size, rank, infinite, special_mode
+        dataset_name,
+        dataset_path,
+        data_processing_style,
+        tokenizer,
+        representation_type,
+        seq_len,
+        world_size,
+        rank,
+        infinite,
+        special_mode,
     )
 
-    return DPAwareDataLoader(rank, hf_ds, batch_size=batch_size, pin_memory=pin_memory, num_workers=num_workers)
+    return DPAwareDataLoader(
+        rank,
+        hf_ds,
+        batch_size=batch_size,
+        pin_memory=pin_memory,
+        num_workers=num_workers,
+    )

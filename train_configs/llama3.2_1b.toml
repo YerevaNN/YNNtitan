@@ -1,7 +1,7 @@
 # torchtitan Config.toml
 
 [job]
-dump_folder = "/nfs/dgx/raid/chem/titan_outputs"
+dump_folder = "/nfs/h100/raid/chem/checkpoints"
 description = "Llama 3.2 training"
 use_for_integration_test = false
 
@@ -29,8 +29,8 @@ name = "AdamW"
 lr = 2.5e-4
 
 [training]
-batch_size = 8
-gradient_accumulation_steps = 16
+batch_size = 5
+gradient_accumulation_steps = 24
 seq_len = 2048
 warmup_steps = 500  # lr scheduler warm up, normally 20% of the train steps
 max_norm = 1.0  # grad norm clipping
@@ -50,7 +50,7 @@ enable_valid = true
 dataset = "chemlactica_valid"  # supported datasets: chemlactica_valid_mini
 
 [dataloader]
-num_workers = 1
+num_workers = 2
 
 [experimental]
 pipeline_parallel_degree = 1

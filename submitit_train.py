@@ -17,7 +17,7 @@ if __name__ == "__main__":
         gpus_per_node=n_gpus,
         nodes=1,
         mem_gb=80,
-        cpus_per_task=n_gpus * 4,
+        cpus_per_task=n_gpus * 6,
         slurm_additional_parameters={"partition": node},
     )
 
