@@ -69,7 +69,7 @@ export_dtype = "float32"
 async_mode = "async_with_pinned_mem"  # ["disabled", "async", "async_with_pinned_mem"]
 
 [activation_checkpoint]
-mode = 'full'  # ['none', 'selective', 'full']
+mode = 'none'  # ['none', 'selective', 'full']
 selective_ac_option = '2'  # 'int' = ac every positive int layer or 'op', ac based on ops policy
 
 [float8]

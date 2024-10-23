@@ -9,8 +9,8 @@ import submitit
 
 if __name__ == "__main__":
     executor = submitit.AutoExecutor(folder="~/slurm_jobs/titan/job_%j")
-    n_gpus = 8
-    node = "a100"
+    n_gpus = 6
+    node = "h100"
     executor.update_parameters(
         name="titan",
         timeout_min=6 * 24 * 60,
