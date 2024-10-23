@@ -16,7 +16,7 @@ save_memory_snapshot_folder = "memory_snapshot"
 log_freq = 1
 enable_color_printing = true
 enable_aim = true
-save_aim_folder = "aim"
+save_aim_folder = "aim_debug"
 
 [model]
 name = "llama3"
@@ -29,24 +29,23 @@ name = "AdamW"
 lr = 8e-4
 
 [training]
-batch_size = 2
+batch_size = 8
 gradient_accumulation_steps = 1
 seq_len = 2048
-warmup_steps = 2  # lr scheduler warm up, normally 20% of the train steps
+warmup_steps = 20  # lr scheduler warm up, normally 20% of the train steps
 max_norm = 1.0  # grad norm clipping
-steps = 100
+steps = 200
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = true
-dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
+dataset = "chemlactica_train"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
 data_processing_style="chemlactica_style"
 representation_type="SAFE"
 
 [validation]
-batch_size = 2
-eval_freq = 5
-enable_val = true
-dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
+valid_freq = 50
+enable_valid = true
+dataset = "chemlactica_valid"  # supported datasets: chemlactica_valid_mini
 
 # [dataloader]
 # special_mode = "yield_tensor"
@@ -56,10 +55,10 @@ pipeline_parallel_degree = 1
 enable_async_tensor_parallel = false
 
 [checkpoint]
-enable_checkpoint = true
-load_folder = "yerevann/Llama-debug/428d5798a435431c9887fe7d"
+enable_checkpoint = false
+# load_folder = "yerevann/Llama-debug/428d5798a435431c9887fe7d"
 save_folder = "yerevann/Llama-debug"
-load_at_step = 50
+# load_at_step = 50
 create_seed_checkpoint = false
 interval_type = "steps"
 interval = 50
@@ -68,7 +67,7 @@ export_dtype = "float32"
 async_mode = "async_with_pinned_mem"  # ["disabled", "async", "async_with_pinned_mem"]
 
 [activation_checkpoint]
-mode = 'selective'  # ['none', 'selective', 'full']
+mode = 'none'  # ['none', 'selective', 'full']
 selective_ac_option = '2'  # 'int' = ac every positive int layer or 'op', ac based on ops policy
 
 [float8]

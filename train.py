@@ -11,25 +11,25 @@ from datetime import timedelta
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
 from torch.fx import GraphModule
-
-from torchtitan.utils import common_utils as utils
 from torchtitan.checkpoint import CheckpointManager, TrainState
 from torchtitan.config_manager import JobConfig
 from torchtitan.datasets import build_hf_data_loader
-from torchtitan.tokenizers.tokenizer import build_tokenizer
 from torchtitan.float8 import Float8Handler
 from torchtitan.logging import init_logger, logger
 from torchtitan.metrics import build_gpu_memory_monitor, build_metric_logger
 from torchtitan.models import (
     model_name_to_cls,
+    model_name_to_tokenizer,
     model_name_to_weights_download_fns,
     model_name_to_weights_export_fns,
-    model_name_to_tokenizer,
     models_config,
 )
 from torchtitan.optimizer import build_lr_schedulers, build_optimizers
 from torchtitan.parallelisms import models_parallelize_fns, ParallelDims
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
+from torchtitan.tokenizers.tokenizer import build_tokenizer
+
+from torchtitan.utils import common_utils as utils
 from torchtitan.validation import validate
 
 
@@ -88,9 +88,9 @@ def main(job_config: JobConfig):
         dp_degree,
         dp_rank,
         representation_type,
-        pin_memory = job_config.dataloader.pin_memory,
-        num_workers = job_config.dataloader.num_workers,
-        special_mode = job_config.dataloader.special_mode,
+        pin_memory=job_config.dataloader.pin_memory,
+        num_workers=job_config.dataloader.num_workers,
+        special_mode=job_config.dataloader.special_mode,
     )
 
     if not job_config.validation.batch_size:
@@ -172,7 +172,7 @@ def main(job_config: JobConfig):
     # loss function to be shared by Pipeline Parallel and SPMD training
     def loss_fn(pred, labels):
         return torch.nn.functional.cross_entropy(
-            pred.flatten(0, 1), labels.flatten(0, 1)
+            pred.flatten(0, 1), labels.flatten(0, 1), reduction="mean"
         )
 
     # apply parallelisms and initialization
@@ -216,7 +216,7 @@ def main(job_config: JobConfig):
         lr_schedulers=lr_schedulers.schedulers,
         states={"train_state": train_state},
         job_config=job_config,
-        experiment_hash=metric_logger.experiment_hash
+        experiment_hash=metric_logger.experiment_hash,
     )
 
     if job_config.model_download_export.to_titan:
@@ -235,7 +235,9 @@ def main(job_config: JobConfig):
         ), "Must create seed-checkpoint using one gpu, to disable sharding"
         model_name_to_weights_export_fns[model_name](
             model,
-            save_dir=checkpoint._create_checkpoint_id(job_config.checkpoint.load_at_step, checkpoint.save_folder),
+            save_dir=checkpoint._create_checkpoint_id(
+                job_config.checkpoint.load_at_step, checkpoint.save_folder
+            ),
             tokenizer=tokenizer.model,
             token_embedding_size=model_config.vocab_size,
         )
@@ -283,6 +285,7 @@ def main(job_config: JobConfig):
             optimizers.zero_grad()
             logger.debug("step")
 
+            loss = 0
             for _ in range(job_config.training.gradient_accumulation_steps):
                 batch = next(data_iterator, None)
                 input_ids, labels = batch
@@ -291,16 +294,16 @@ def main(job_config: JobConfig):
                 input_ids = input_ids.cuda()
                 labels = labels.cuda()
                 data_loading_times.append(time.perf_counter() - data_load_start)
-                logger.debug(f"before model forward {train_state.step}")
 
                 with train_context():
                     logger.debug("enter context")
                     pred = model(input_ids)
-                    loss = loss_fn(pred, labels)
+                    cur_loss = loss_fn(pred, labels)
                     # pred.shape=(bs, seq_len, vocab_size)
                     # need to free to before bwd to avoid peaking memory
                     del pred
-                    loss.backward()
+                    cur_loss.backward()
+                    loss += cur_loss.detach().clone()
 
                 for m in model_parts:
                     torch.nn.utils.clip_grad_norm_(
@@ -319,6 +322,7 @@ def main(job_config: JobConfig):
             # it issues a single all-reduce for all parameters at once for better performance
             float8_handler.precompute_float8_dynamic_scale_for_fsdp(model_parts)
 
+            loss /= job_config.training.gradient_accumulation_steps
             losses_since_last_log.append(loss)
 
             # log train metrics
@@ -434,7 +438,7 @@ def main(job_config: JobConfig):
                     dp_mesh,
                     world_size,
                     job_config.experimental.enable_compiled_autograd,
-                    device
+                    device,
                 )
 
             checkpoint.save(
