@@ -1,7 +1,7 @@
 # torchtitan Config.toml
 
 [job]
-dump_folder = "./outputs"
+dump_folder = "/nfs/h100/raid/chem/checkpoints"
 description = "Llama 3 debug training"
 use_for_integration_test = true
 
@@ -15,17 +15,14 @@ save_memory_snapshot_folder = "memory_snapshot"
 [metrics]
 log_freq = 1
 enable_color_printing = true
-# enable_aim = true
-# save_aim_folder = "aim"
-#aim_hash = "1d56ec7bed87438684a8da6b"
-#aim_experiment_name = "hello"
+enable_aim = true
+save_aim_folder = "aim"
 
 [model]
 name = "llama3"
 flavor = "debugmodel"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
-# test tokenizer.model, for debug purpose only
-tokenizer_path = "./torchtitan/tokenizers/chemlactica-125m"
+tokenizer_path = "torchtitan/tokenizers/Llama-3.2-chem-1B-v1/"
 
 [optimizer]
 name = "AdamW"
@@ -37,7 +34,7 @@ gradient_accumulation_steps = 1
 seq_len = 2048
 warmup_steps = 2  # lr scheduler warm up, normally 20% of the train steps
 max_norm = 1.0  # grad norm clipping
-steps = 20
+steps = 100
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = true
@@ -51,20 +48,21 @@ eval_freq = 5
 enable_val = true
 dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
 
-[dataloader]
-special_mode = "yield_tensor"
+# [dataloader]
+# special_mode = "yield_tensor"
 
 [experimental]
 pipeline_parallel_degree = 1
 enable_async_tensor_parallel = false
 
 [checkpoint]
-enable_checkpoint = false
-save_folder = "checkpoint"
-load_folder = "checkpoint"
+enable_checkpoint = true
+load_folder = "yerevann/Llama-debug/428d5798a435431c9887fe7d"
+save_folder = "yerevann/Llama-debug"
+load_at_step = 50
 create_seed_checkpoint = false
 interval_type = "steps"
-interval = 5
+interval = 50
 model_weights_only = false
 export_dtype = "float32"
 async_mode = "async_with_pinned_mem"  # ["disabled", "async", "async_with_pinned_mem"]
