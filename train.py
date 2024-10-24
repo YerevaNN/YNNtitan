@@ -172,7 +172,7 @@ def main(job_config: JobConfig):
     # loss function to be shared by Pipeline Parallel and SPMD training
     def loss_fn(pred, labels):
         return torch.nn.functional.cross_entropy(
-            pred.flatten(0, 1), labels.flatten(0, 1), reduction="mean"
+            pred.flatten(0, 1), labels.flatten(0, 1)
         )
 
     # apply parallelisms and initialization
