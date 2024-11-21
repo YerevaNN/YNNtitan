@@ -30,11 +30,11 @@ lr = 8e-4
 
 [training]
 batch_size = 1
-gradient_accumulation_steps = 64
+gradient_accumulation_steps = 1
 seq_len = 2048
 warmup_steps = 20  # lr scheduler warm up, normally 20% of the train steps
 max_norm = 1.0  # grad norm clipping
-steps = 200
+steps = 100
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = true
@@ -55,10 +55,10 @@ pipeline_parallel_degree = 1
 enable_async_tensor_parallel = false
 
 [checkpoint]
-enable_checkpoint = false
-# load_folder = "yerevann/Llama-debug/428d5798a435431c9887fe7d"
+enable_checkpoint = true
+load_folder = "yerevann/Llama-debug/be8c15bafddd424f87c4f6a1"
 save_folder = "yerevann/Llama-debug"
-# load_at_step = 50
+load_at_step = 50
 create_seed_checkpoint = false
 interval_type = "steps"
 interval = 50

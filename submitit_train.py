@@ -13,7 +13,7 @@ if __name__ == "__main__":
     node = "h100"
     executor.update_parameters(
         name="titan",
-        timeout_min=6 * 24 * 60,
+        timeout_min=24 * 24 * 60,
         gpus_per_node=n_gpus,
         nodes=1,
         mem_gb=80,
