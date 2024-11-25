@@ -58,10 +58,10 @@ enable_async_tensor_parallel = false
 
 [checkpoint]
 enable_checkpoint = true
-# load_folder = "meta-llama/Llama-3.2-1B"
 save_folder = "yerevann/Llama-3.2-1B"
-load_folder = "yerevann/Llama-3.2-1B/6f4527e99425492bbe4d083c"
-load_at_step = 22000
+# load_folder = "meta-llama/Llama-3.2-1B"
+load_folder = "yerevann/Llama-3.2-1B/7cb51da2af744968a9b38e24"
+load_at_step = 20000
 interval_type = "steps"
 interval = 2000
 model_weights_only = false
