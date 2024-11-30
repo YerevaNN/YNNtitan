@@ -302,6 +302,7 @@ def main(job_config: JobConfig):
                     # pred.shape=(bs, seq_len, vocab_size)
                     # need to free to before bwd to avoid peaking memory
                     del pred
+                    cur_loss /= job_config.training.gradient_accumulation_steps
                     cur_loss.backward()
                     loss += cur_loss.detach().clone()
 
@@ -322,7 +323,7 @@ def main(job_config: JobConfig):
             # it issues a single all-reduce for all parameters at once for better performance
             float8_handler.precompute_float8_dynamic_scale_for_fsdp(model_parts)
 
-            loss /= job_config.training.gradient_accumulation_steps
+            # loss /= job_config.training.gradient_accumulation_steps
             losses_since_last_log.append(loss)
 
             # log train metrics
