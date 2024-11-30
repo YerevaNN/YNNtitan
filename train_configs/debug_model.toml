@@ -30,15 +30,15 @@ lr = 8e-4
 
 [training]
 batch_size = 1
-gradient_accumulation_steps = 1
+gradient_accumulation_steps = 48
 seq_len = 2048
 warmup_steps = 20  # lr scheduler warm up, normally 20% of the train steps
 max_norm = 1.0  # grad norm clipping
-steps = 150
+steps = 100
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = true
-dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
+dataset = "chemlactica_train"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
 data_processing_style="chemlactica_style"
 representation_type="SMILES"
 
@@ -55,10 +55,10 @@ pipeline_parallel_degree = 1
 enable_async_tensor_parallel = false
 
 [checkpoint]
-enable_checkpoint = true
-load_folder = "yerevann/Llama-debug/b00ef18db9d447ff84b9035a"
+enable_checkpoint = false
+# load_folder = "yerevann/Llama-debug/b00ef18db9d447ff84b9035a"
 save_folder = "yerevann/Llama-debug"
-load_at_step = 100
+# load_at_step = 100
 create_seed_checkpoint = false
 interval_type = "steps"
 interval = 50
