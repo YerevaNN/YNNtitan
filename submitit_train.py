@@ -9,7 +9,7 @@ import submitit
 
 if __name__ == "__main__":
     executor = submitit.AutoExecutor(folder="~/slurm_jobs/titan/job_%j")
-    n_gpus = 6
+    n_gpus = 8
     node = "h100"
     executor.update_parameters(
         name="titan",
@@ -17,7 +17,7 @@ if __name__ == "__main__":
         gpus_per_node=n_gpus,
         nodes=1,
         mem_gb=80,
-        cpus_per_task=n_gpus * 6,
+        cpus_per_task=n_gpus * 12,
         slurm_additional_parameters={"partition": node},
     )
 

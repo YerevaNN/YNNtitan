@@ -50,7 +50,7 @@ enable_valid = true
 dataset = "chemlactica_valid"  # supported datasets: chemlactica_valid_mini
 
 [dataloader]
-num_workers = 2
+num_workers = 4
 
 [experimental]
 pipeline_parallel_degree = 1
@@ -59,9 +59,9 @@ enable_async_tensor_parallel = false
 [checkpoint]
 enable_checkpoint = true
 save_folder = "yerevann/Llama-3.2-1B"
-# load_folder = "meta-llama/Llama-3.2-1B"
-load_folder = "yerevann/Llama-3.2-1B/7b98d06b463e45ea8db87d05"
-load_at_step = 22000
+load_folder = "meta-llama/Llama-3.2-1B"
+# load_folder = "yerevann/Llama-3.2-1B/ec943c9e63db4cf7b4a8b847"
+load_at_step = 40000
 interval_type = "steps"
 interval = 2000
 model_weights_only = false
