@@ -133,7 +133,7 @@ class SaveDone:
     pass
 
 
-def checkpoint_mp(recv, send,log_level):
+def checkpoint_mp(recv, send, log_level):
     init_logger(log_level)
     os.environ["MASTER_PORT"] = str(int(os.environ["MASTER_PORT"]) + 2)
     os.environ["TORCHELASTIC_USE_AGENT_STORE"] = "False"
@@ -236,12 +236,21 @@ class CheckpointManager:
             for idx, lr_scheduler in enumerate(lr_schedulers):
                 self.states[f"lr_scheduler_{idx}"] = lr_scheduler
 
-        
-        if job_config.model_download_export.to_hf or job_config.model_download_export.to_titan:
-            self.save_folder = os.path.join(job_config.job.dump_folder, ckpt_config.save_folder)
+        if (
+            job_config.model_download_export.to_hf
+            or job_config.model_download_export.to_titan
+        ):
+            self.save_folder = os.path.join(
+                job_config.job.dump_folder, ckpt_config.save_folder
+            )
         else:
-            self.save_folder = os.path.join(job_config.job.dump_folder, os.path.join(ckpt_config.save_folder, experiment_hash))
-        self.load_folder = os.path.join(job_config.job.dump_folder, ckpt_config.load_folder)
+            self.save_folder = os.path.join(
+                job_config.job.dump_folder,
+                os.path.join(ckpt_config.save_folder, experiment_hash),
+            )
+        self.load_folder = os.path.join(
+            job_config.job.dump_folder, ckpt_config.load_folder
+        )
         self.interval_type = (
             IntervalType.SECONDS
             if ckpt_config.interval_type == "seconds"
@@ -273,7 +282,7 @@ class CheckpointManager:
                 args=(
                     self.mp_queue_send,
                     self.mp_queue_recv,
-                    job_config.logging.log_level
+                    job_config.logging.log_level,
                 ),
                 daemon=True,
             )
@@ -330,7 +339,10 @@ class CheckpointManager:
         else:
             logger.info(f"Saving a full checkpoint at last step, step {curr_step}.")
 
-        dcp.save(self.states, checkpoint_id=self._create_checkpoint_id(curr_step, self.save_folder))
+        dcp.save(
+            self.states,
+            checkpoint_id=self._create_checkpoint_id(curr_step, self.save_folder),
+        )
         self.reset()
 
     def _should_save(self, curr_step: int, force: bool = False) -> bool:
@@ -457,7 +469,9 @@ class CheckpointManager:
             return False
         if not os.path.isdir(self.load_folder):
             return False
-        if step != -1 and not os.path.isdir(self._create_checkpoint_id(step, self.load_folder)):
+        if step != -1 and not os.path.isdir(
+            self._create_checkpoint_id(step, self.load_folder)
+        ):
             return False
 
         if step == -1:
@@ -473,15 +487,28 @@ class CheckpointManager:
 
         # We won't have optimizer states to load, if we are loading a seed checkpoint
         states = {"model": self.states["model"]} if step == 0 else self.states
+        # PyTorch bug: (pytorch/pytorch#138575)
+        # dcp.load() replaces the values of stateful elements in `states` with new objects
+        # from loading the checkpoint, in addition to updating the states of the original
+        # objects from `states` in-place. This is a problem because the state_dict no longer
+        # refers to the objects being used in the train loop, meaning any future checkpoints
+        # will not include updates to these objects (such as updated optimizer states, etc.)
+        original_stateful_states = {
+            k: v for k, v in states.items() if isinstance(v, Stateful)
+        }
         logger.info(f"Loading the checkpoint at step {step}.")
         begin = time.monotonic()
         dcp.load(
-            states,
-            checkpoint_id=self._create_checkpoint_id(step, self.load_folder)
+            original_stateful_states,
+            checkpoint_id=self._create_checkpoint_id(step, self.load_folder),
         )
         logger.info(
             f"Finished loading the checkpoint in {time.monotonic() - begin:.2f} seconds."
         )
+        # bugfix from above: restore the original stateful objects,
+        # whose states were already updated in-place by dcp.load()
+        # for k, v in original_stateful_states.items():
+        #     states[k].load_state_dict(v)
         return True
 
     def _purge_stale_checkpoints(self):
