@@ -26,8 +26,8 @@ if __name__ == "__main__":
         # "optimizer.lr": ["8e-4", "6e-4", "4e-4", "2e-4"],
         # "optimizer.lr": ["2.5e-4"],
         # "optimizer.lr": ["1e-4", "8e-5", "6e-5", "4e-5", "2e-5"],
-        "training.gradient_accumulation_steps": ["21", "25", "29", "33"],
-        "training.steps": ["31000", "26000", "22.500", "20000"],
+        # "training.gradient_accumulation_steps": ["21", "25", "29", "33"],
+        # "training.steps": ["31000", "26000", "22500", "20000"],
     }
 
     jobs = []
