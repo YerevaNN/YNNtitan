@@ -53,6 +53,30 @@ def convert_representation(smiles, representation_type):
         # logger.info(f"{e}. Could not encode molecule {smiles} with representation {representation_type}")
         return smiles
 
+def generate_formatted_conformer_string(compound_json, rng, representation_type):
+    canonical_smiles = compound_json.get("canonical_smiles", "")
+    canonical_smiles = f"[SMILES]{canonical_smiles}[/SMILES]"
+    
+    conformers = compound_json.get("conformers", "")
+    label = compound_json.get("pcqm4v2_label", "")
+
+    key_value_pairs = []
+    compound_formatted_string = ""
+
+    if rng.integers(2) == 0:
+        compound_formatted_string += canonical_smiles
+    else:
+        key_value_pairs.append(canonical_smiles)
+
+    key_value_pairs.append(f"[CONFORMER]{conformers['embedded_smiles']}[/CONFORMER]")
+    if label != "nan":
+        key_value_pairs.append(f"[PROPERTY]{label:.2f}[/PROPERTY]" )
+
+    rng.shuffle(key_value_pairs)
+    for kv in key_value_pairs:
+        compound_formatted_string += kv
+
+    return compound_formatted_string
 
 def generate_formatted_string(compound_json, rng, representation_type):
     key_value_pairs = []

@@ -9,8 +9,9 @@ import submitit
 
 if __name__ == "__main__":
     executor = submitit.AutoExecutor(folder="~/slurm_jobs/titan/job_%j")
-    n_gpus = 6
-    node = "h100"
+    # executor = submitit.local.local.LocalExecutor(folder="~/slurm_jobs/titan/job_%j")
+    n_gpus = 4
+    node = "a100"
     executor.update_parameters(
         name="titan",
         timeout_min=24 * 24 * 60,
@@ -26,7 +27,8 @@ if __name__ == "__main__":
         for _ in range(1):
             # train_config = './train_configs/chemlactica_125m.toml'
             # train_config = './train_configs/chemlactica_1.3b.toml'
-            train_config = "./train_configs/llama3.2_1b.toml"
+            train_config = "./train_configs/llama3.2_1b_conformers.toml"
+            # train_config = "./train_configs/llama3.2_1b_conversion.toml"
             # train_config = './train_configs/debug_model.toml'
             function = submitit.helpers.CommandFunction(
                 [
