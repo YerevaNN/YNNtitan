@@ -25,7 +25,7 @@ except ImportError as e:
 
 from torchtitan.logging import logger
 from torchtitan.tokenizers.tokenizer import Tokenizer
-from torchtitan.utils.dataset_utils import chemlactica_style_data_processing
+from torchtitan.utils.dataset_utils import chemlactica_style_data_processing, conformer_data_processing
 
 from datasets import load_dataset
 from datasets.distributed import split_dataset_by_node
@@ -38,13 +38,16 @@ _supported_datasets = {
     "c4": "allenai/c4",
     "chemlactica_train_mini": "test/assets/chemlactica_train_mini",
     "chemlactica_train": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form/train_rdkit_computed_rel+form",
+    "conformers_train": "/auto/home/menuab/code/3DMolGen/data/pcqm/train",
+    "conformers_valid": "/auto/home/menuab/code/3DMolGen/data/pcqm/valid",
     # valid
     "chemlactica_valid": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form",
     "chemlactica_valid_mini": "test/assets/chemlactica_valid_mini",
 }
 
 _supported_data_processing_styles = {
-    "chemlactica_style": chemlactica_style_data_processing
+    "chemlactica_style": chemlactica_style_data_processing,
+    "conformer_style": conformer_data_processing
 }
 
 
