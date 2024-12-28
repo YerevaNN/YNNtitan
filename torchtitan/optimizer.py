@@ -6,11 +6,11 @@
 
 import functools
 import math
+from enum import Enum
 
 import torch
 from torch.optim.lr_scheduler import LambdaLR
 from torchtitan.config_manager import JobConfig
-from enum import Enum
 
 
 def build_optimizers(model_parts, job_config: JobConfig):
@@ -57,11 +57,13 @@ def build_optimizers(model_parts, job_config: JobConfig):
 
     return OptimizersContainer([_build_optimizer(model) for model in model_parts])
 
+
 def linear_warmup(warmup_steps: int, current_step: int) -> float:
     """Computes the linear warmup scaling factor."""
     if warmup_steps <= 0:
         raise ValueError("warmup_steps must be positive.")
     return float((current_step + 1) / (warmup_steps + 1))
+
 
 # Decay functions
 def linear_decay(decay_steps: int, current_step: int, start_step: int) -> float:
@@ -71,6 +73,7 @@ def linear_decay(decay_steps: int, current_step: int, start_step: int) -> float:
     progress = float((current_step - start_step) / decay_steps)
     return max(0.0, 1 - progress)
 
+
 def cosine_decay(decay_steps: int, current_step: int, start_step: int) -> float:
     """Computes the cosine decay scaling factor."""
     if decay_steps <= 0:
@@ -78,41 +81,86 @@ def cosine_decay(decay_steps: int, current_step: int, start_step: int) -> float:
     current_step = min(current_step - start_step, decay_steps)
     return 0.5 * (1 + math.cos(math.pi * current_step / decay_steps))
 
+
 class Decay(Enum):
     LINEAR = functools.partial(linear_decay)
     COSINE = functools.partial(cosine_decay)
 
     @staticmethod
-    def from_string(decay_type: str) -> 'Decay':
+    def from_string(decay_type: str) -> "Decay":
         """Converts a string to the corresponding Decay enum value."""
         try:
             return Decay[decay_type.upper()]
-        except KeyError:
-            raise ValueError(f"Invalid decay type: {decay_type}. Expected one of {list(Decay.__members__.keys())}")
+        except KeyError as e:
+            raise ValueError(
+                f"Invalid decay type: {decay_type}. Expected one of {list(Decay.__members__.keys())}"
+            ) from e
 
 
 def warmup_stable_decay(
-        decay_type: Decay, warmup_steps: int, decay_steps: int,training_steps:int, current_step: int
+    decay_type: Decay,
+    warmup_steps: int,
+    decay_steps: int,
+    training_steps: int,
+    current_step: int,
 ) -> float:
     """Computes linear warmup followed by linear decay.
     Per LambdaLR requirement, this is accomplished by returning
     a multiplicative factor to adjust the learning rate to
     create the desired schedule.
     """
-    start_decay_step = training_steps-decay_steps
+    start_decay_step = training_steps - decay_steps
 
     if current_step < warmup_steps:
         # warmup phase
-        curr_adjustment = linear_warmup(warmup_steps,current_step)
-        return linear_warmup(warmup_steps,current_step)
+        curr_adjustment = linear_warmup(warmup_steps, current_step)
+        return linear_warmup(warmup_steps, current_step)
 
-    elif (current_step >= warmup_steps) and (current_step<start_decay_step):
+    elif (current_step >= warmup_steps) and (current_step < start_decay_step):
         # stable phase, no adjustment to lr
         return 1.0
 
     else:
         # decay phase supporting multiple decay functions
         return decay_type.value(decay_steps, current_step, start_decay_step)
+
+
+# implementation of WSD-S scheduler
+def warmup_stable_decay_simplified(
+    decay_type: Decay,
+    warmup_steps: int,
+    decay_steps_perc: float,
+    num_decays: int,
+    training_steps: int,
+    current_step: int,
+) -> float:
+    # num steps for each decay
+    per_decay_num_steps = training_steps // num_decays
+    # current decay index
+    decay_index = math.ceil(current_step / per_decay_num_steps)
+    # the step at which lr is decayed
+    decay_at_step = decay_index * per_decay_num_steps
+    # number of decay steps
+    if decay_index == 1:
+        # make sure the decay_steps_perc does not include the warmup_steps
+        decay_steps_perc = min(decay_steps_perc, 1 - warmup_steps / decay_at_step)
+
+    decay_steps = int(decay_at_step * decay_steps_perc)
+    # the step at which to start the decay
+    start_decay_step = decay_at_step - decay_steps
+
+    if current_step < warmup_steps:
+        # warmup phase
+        curr_adjustment = current_step / warmup_steps
+    elif current_step < start_decay_step:
+        # stable phase, no adjustment to lr
+        curr_adjustment = 1.0
+    else:
+        # decay phase supporting multiple decay functions
+        curr_adjustment = decay_type.value(decay_steps, current_step, start_decay_step)
+
+    return curr_adjustment
+
 
 def build_lr_schedulers(optimizers, job_config: JobConfig) -> LambdaLR:
     def _build_lr_scheduler(optimizer):
@@ -121,11 +169,25 @@ def build_lr_schedulers(optimizers, job_config: JobConfig) -> LambdaLR:
         post_warmup_steps = float(max(1, job_config.training.steps - warmup_steps))
 
         # If decay steps is not set in config, decay will begin immediately after warmup
-        decay_steps = job_config.training.decay_steps if job_config.training.decay_steps else post_warmup_steps
+        decay_steps = (
+            job_config.training.decay_steps
+            if job_config.training.decay_steps
+            else post_warmup_steps
+        )
+        decay_steps_perc = job_config.training.decay_steps_perc
+        num_decays = job_config.training.num_decays
         decay_type = Decay.from_string(job_config.training.decay_type)
 
+        # lr_lambda = functools.partial(
+        #     warmup_stable_decay, decay_type, warmup_steps, decay_steps, job_config.training.steps
+        # )
         lr_lambda = functools.partial(
-            warmup_stable_decay, decay_type ,warmup_steps, decay_steps, job_config.training.steps
+            warmup_stable_decay_simplified,
+            decay_type,
+            warmup_steps,
+            decay_steps_perc,
+            num_decays,
+            job_config.training.steps,
         )
         warmup_stable_decay_scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
         return warmup_stable_decay_scheduler
@@ -139,7 +201,8 @@ def build_lr_schedulers(optimizers, job_config: JobConfig) -> LambdaLR:
         def step(self):
             for schedulers in self.schedulers:
                 schedulers.step()
-        @property 
+
+        @property
         def last_lr(self):
             return self.schedulers[0].get_last_lr()[0]
 
