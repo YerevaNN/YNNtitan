@@ -26,7 +26,7 @@ tokenizer_path = "torchtitan/tokenizers/Llama-3.2-chem-1B-v1/"
 
 [optimizer]
 name = "AdamW"
-lr = 6e-4
+lr = 4e-4
 
 [training]
 batch_size = 10
@@ -36,12 +36,12 @@ max_norm = 1.0  # grad norm clipping
 warmup_steps = 500  # lr scheduler warm up, normally 20% of the train steps
 steps = 80000
 decay_steps_perc = 0.1
-num_decays = 4
+num_decays = 1
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = true
 dataset = "chemlactica_train"
-data_processing_style="chemlactica_style"
+data_processing_style = "chemlactica_style"
 representation_type = "SMILES"
 
 [validation]
@@ -60,8 +60,8 @@ enable_async_tensor_parallel = false
 enable_checkpoint = true
 save_folder = "yerevann/Llama-3.2-1B"
 load_folder = "meta-llama/Llama-3.2-1B"
-# load_folder = "yerevann/Llama-3.2-1B/ec943c9e63db4cf7b4a8b847"
-# load_at_step = 40000
+# load_folder = "yerevann/Llama-3.2-1B/c08769a3ed064389838fd8a5"
+# load_at_step = 32000
 interval_type = "steps"
 interval = 2000
 model_weights_only = false
