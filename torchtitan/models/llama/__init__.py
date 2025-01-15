@@ -31,6 +31,30 @@ llama2_configs = {
 
 llama3_configs = {
     "debugmodel": ModelArgs(dim=256, n_layers=8, n_heads=16, rope_theta=500000),
+    "125M": ModelArgs(
+        dim=768,
+        n_layers=12,
+        n_heads=12,
+        n_kv_heads=8,
+        rope_theta=500000,
+        share_embeddings=True,
+    ),
+    "350M": ModelArgs(
+        dim=1024,
+        n_layers=24,
+        n_heads=16,
+        n_kv_heads=8,
+        rope_theta=500000,
+        share_embeddings=True,
+    ),
+    "750M": ModelArgs(
+        dim=1536,
+        n_layers=24,
+        n_heads=16,
+        n_kv_heads=8,
+        rope_theta=500000,
+        share_embeddings=True,
+    ),
     "1B": ModelArgs(
         dim=2048,
         n_layers=16,
