@@ -35,7 +35,7 @@ llama3_configs = {
         dim=768,
         n_layers=12,
         n_heads=12,
-        n_kv_heads=8,
+        n_kv_heads=4,
         rope_theta=500000,
         share_embeddings=True,
     ),
