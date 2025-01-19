@@ -29,8 +29,8 @@ name = "AdamW"
 lr = 4e-4
 
 [training]
-batch_size = 12
-gradient_accumulation_steps = 10
+batch_size = 11
+gradient_accumulation_steps = 11
 seq_len = 2048
 max_norm = 1.0  # grad norm clipping
 warmup_steps = 500  # lr scheduler warm up, normally 20% of the train steps
@@ -59,9 +59,9 @@ enable_async_tensor_parallel = false
 [checkpoint]
 enable_checkpoint = true
 save_folder = "yerevann/Llama-3.2-1B"
-load_folder = "meta-llama/Llama-3.2-1B"
-# load_folder = "yerevann/Llama-3.2-1B/c08769a3ed064389838fd8a5"
-# load_at_step = 32000
+# load_folder = "meta-llama/Llama-3.2-1B"
+load_folder = "yerevann/Llama-3.2-1B/b17b0e8b713f4abeba404ddf"
+load_at_step = 18000
 interval_type = "steps"
 interval = 2000
 model_weights_only = false
