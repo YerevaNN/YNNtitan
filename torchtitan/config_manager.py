@@ -16,15 +16,16 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib
 
-from torchtitan.logging import logger, validate_log_level
-
 from typing import Optional
+
+from torchtitan.logging import logger, validate_log_level
 
 TORCH_DTYPE_MAP = {
     "float16": torch.float16,
     "float32": torch.float32,
     "bfloat16": torch.bfloat16,
 }
+
 
 def string_list(raw_arg):
     return raw_arg.split(",")
@@ -181,7 +182,10 @@ class JobConfig:
             "--optimizer.name", type=str, default="AdamW", help="Optimizer to use"
         )
         self.parser.add_argument(
-            "--optimizer.schedule", type=str, default="Linear", help="Optimization schedule to use"
+            "--optimizer.schedule",
+            type=str,
+            default="Linear",
+            help="Optimization schedule to use",
         )
         self.parser.add_argument(
             "--optimizer.lr", type=float, default=8e-4, help="Learning rate to use"
@@ -225,17 +229,29 @@ class JobConfig:
             help="Steps for lr scheduler warmup, normally 1/5 of --training.steps",
         )
         self.parser.add_argument(
-                "--training.decay_steps",
-                type=Optional[int],
-                default=None,
-                help="Steps for lr scheduler decay, default is decay starts immediately after warmup",
+            "--training.num_decays",
+            type=Optional[float],
+            default=1,
+            help="The number of total decays to perform throughout the training, following the WSD-S scheduler",
         )
         self.parser.add_argument(
-                "--training.decay_type",
-                type=str,
-                default="linear",
-                choices = ["linear","cosine"],
-                help="Steps for lr scheduler decay type, defaults to linear",
+            "--training.decay_steps",
+            type=Optional[int],
+            default=None,
+            help="Steps for lr scheduler decay, default is decay starts immediately after warmup",
+        )
+        self.parser.add_argument(
+            "--training.decay_steps_perc",
+            type=Optional[float],
+            default=1.0,
+            help="The percentage of the steps to use as decay steps",
+        )
+        self.parser.add_argument(
+            "--training.decay_type",
+            type=str,
+            default="linear",
+            choices=["linear", "cosine"],
+            help="Steps for lr scheduler decay type, defaults to linear",
         )
         self.parser.add_argument(
             "--training.max_norm",
@@ -266,7 +282,7 @@ class JobConfig:
             default=True,
             action="store_true",
             help="Whether to apply loss parallel when sequence parallel is enabled",
-        )        
+        )
         self.parser.add_argument(
             "--training.representation_type",
             default="SMILES",
@@ -387,9 +403,7 @@ class JobConfig:
         )
 
         # validation configs
-        self.parser.add_argument(
-            "--validation.batch_size", type=int, default=None
-        )
+        self.parser.add_argument("--validation.batch_size", type=int, default=None)
         self.parser.add_argument(
             "--validation.dataset", type=str, help="Dataset to use", default=None
         )
@@ -402,10 +416,16 @@ class JobConfig:
             default=None,
         )
         self.parser.add_argument(
-            "--validation.valid_freq", type=int, default=1024, help="How often to evaluate the model and log metrics to aim."
+            "--validation.valid_freq",
+            type=int,
+            default=1024,
+            help="How often to evaluate the model and log metrics to aim.",
         )
         self.parser.add_argument(
-            "--validation.enable_valid", type=bool, default=False, help="Whether to do validation."
+            "--validation.enable_valid",
+            type=bool,
+            default=False,
+            help="Whether to do validation.",
         )
 
         # checkpointing configs
@@ -647,34 +667,32 @@ class JobConfig:
         )
         self.parser.add_argument(
             "--logging.log_level",
-            default = "INFO",
+            default="INFO",
             choices=["INFO", "DEBUG", "WARNING", "ERROR", "CRITICAL"],
             type=str,
-            help="Set the log level, INFO by default"
+            help="Set the log level, INFO by default",
         )
         self.parser.add_argument(
             "--dataloader.num_workers",
-            default = 0,
+            default=0,
             type=int,
             help="""Set the number of dataloader workers PER RANK, default is 0. 1 is non-blocking.
-            More than 1 may lead to issues with data splitting / duplication"""
+            More than 1 may lead to issues with data splitting / duplication""",
         )
         self.parser.add_argument(
             "--dataloader.pin_memory",
-            default = False,
+            default=False,
             type=bool,
-            help= "Whether or not to pin dataloader memory"
+            help="Whether or not to pin dataloader memory",
         )
 
         self.parser.add_argument(
             "--dataloader.special_mode",
-            default = None,
-            choices = ["yield_tensor"],
+            default=None,
+            choices=["yield_tensor"],
             type=str,
-            help= "Enable a special dataloading mode, useful for debugging"
+            help="Enable a special dataloading mode, useful for debugging",
         )
-
-
 
     def parse_args(self, args_list: list = sys.argv[1:]):
         self.args_list = args_list
