@@ -26,7 +26,8 @@ if __name__ == "__main__":
         for _ in range(1):
             # train_config = './train_configs/chemlactica_125m.toml'
             # train_config = './train_configs/chemlactica_1.3b.toml'
-            train_config = "./train_configs/llama3.2_3b.toml"
+            train_config = "./train_configs/llama3.2_1b.toml"
+            # train_config = "./train_configs/llama3.2_3b.toml"
             # train_config = './train_configs/debug_model.toml'
             function = submitit.helpers.CommandFunction(
                 [
