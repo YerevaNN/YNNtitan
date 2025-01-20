@@ -37,7 +37,16 @@ llama3_configs = {
         n_heads=32,
         n_kv_heads=8,
         rope_theta=500000,
-        share_embeddings=True
+        share_embeddings=True,
+    ),
+    "3B": ModelArgs(
+        dim=3072,
+        n_layers=28,
+        n_heads=24,
+        n_kv_heads=8,
+        rope_theta=500000,
+        ffn_dim_multiplier=2 / 3,  # in Llama3.2-3B dim is 3072, but ffn dim is 8192
+        share_embeddings=True,
     ),
     "8B": ModelArgs(
         dim=4096,
