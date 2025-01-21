@@ -143,14 +143,8 @@ def build_metric_logger(job_config: JobConfig, parallel_dims: ParallelDims):
         )
         enable_aim = torch.distributed.get_rank() == 0
 
-    if job_config.checkpoint.load_at_step != 0:
-        aim_hash = os.path.basename(os.path.normpath(job_config.checkpoint.load_folder))
-        logger.info(f"Using the existing aim experiment with hash {aim_hash}")
-    else:
-        aim_hash = job_config.metrics.aim_hash
-
     metric_logger = MetricLogger(
-        aim_hash,
+        job_config.metrics.aim_hash,
         job_config.metrics.aim_experiment_name,
         log_dir,
         save_aim_folder,
