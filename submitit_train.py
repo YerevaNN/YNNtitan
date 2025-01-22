@@ -49,6 +49,10 @@ if __name__ == "__main__":
                     "train.py",
                     "--job.config_file",
                     train_config,
+                    "--training.steps",
+                    "60000",
+                    "--checkpoint.load_at_step",
+                    "54000",
                 ]
             )
             print(" ".join(function.command))
