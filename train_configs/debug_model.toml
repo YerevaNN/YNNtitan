@@ -15,7 +15,7 @@ save_memory_snapshot_folder = "memory_snapshot"
 [metrics]
 log_freq = 1
 enable_color_printing = true
-enable_aim = true
+enable_aim = false
 save_aim_folder = "aim_debug"
 
 [model]
@@ -36,7 +36,7 @@ max_norm = 1.0  # grad norm clipping
 warmup_steps = 5  # lr scheduler warm up, normally 20% of the train steps
 steps = 200
 decay_steps_perc = 0.1
-num_decays = 4
+num_decays = 1
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = true
@@ -57,9 +57,9 @@ pipeline_parallel_degree = 1
 enable_async_tensor_parallel = false
 
 [checkpoint]
-enable_checkpoint = false
-# load_folder = "yerevann/Llama-debug/bab005ed36ef4e02a3e62333"
+enable_checkpoint = true
 save_folder = "yerevann/Llama-debug"
+# load_folder = "yerevann/Llama-debug/bab005ed36ef4e02a3e62333"
 # load_at_step = 100
 create_seed_checkpoint = false
 interval_type = "steps"
