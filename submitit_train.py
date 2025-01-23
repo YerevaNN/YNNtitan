@@ -51,7 +51,7 @@ if __name__ == "__main__":
                     "--job.config_file",
                     train_config,
                     "--training.steps",
-                    "10000",
+                    "20000",
                 ]
             )
             print(" ".join(function.command))
