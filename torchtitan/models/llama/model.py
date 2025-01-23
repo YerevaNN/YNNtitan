@@ -381,7 +381,7 @@ class Transformer(nn.Module):
         self.output = None
         if not self.model_args.share_embeddings:
             self.output = nn.Linear(model_args.dim, model_args.vocab_size, bias=False)
-            
+
         self.init_weights()
 
     def init_weights(self):
@@ -399,7 +399,8 @@ class Transformer(nn.Module):
         with torch.device(self.freqs_cis.device):
             self.freqs_cis = self._precompute_freqs_cis()
         if self.tok_embeddings is not None:
-            nn.init.normal_(self.tok_embeddings.weight)
+            embed_std = 0.02
+            nn.init.normal_(self.tok_embeddings.weight, mean=0.0, std=embed_std)
         for layer in self.layers.values():
             if layer is not None:
                 layer.init_weights()

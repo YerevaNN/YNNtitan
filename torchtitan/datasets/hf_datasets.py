@@ -130,10 +130,12 @@ class HuggingFaceDataset(IterableDataset, Stateful):
                 streaming="valid" not in dataset_name,
             )
 
-        # try:
-        data_processing_fn = _supported_data_processing_styles[data_processing_style]
-        # except KeyError as e:
-        #     raise ValueError(f"Unsupported data processing style: {data_processing_style}")
+        try:
+            data_processing_fn = _supported_data_processing_styles[
+                data_processing_style
+            ]
+        except KeyError as e:
+            data_processing_fn = lambda *args: args[0]
 
         # TODO: support shuffling and checkpointing
         self.dataset_name = dataset_name

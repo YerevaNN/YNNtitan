@@ -26,6 +26,7 @@ if __name__ == "__main__":
         for _ in range(1):
             # train_config = './train_configs/chemlactica_125m.toml'
             # train_config = './train_configs/chemlactica_1.3b.toml'
+            # train_config = "./train_configs/llama3_125m.toml"
             train_config = "./train_configs/llama3.2_1b.toml"
             # train_config = "./train_configs/llama3.2_3b.toml"
             # train_config = './train_configs/debug_model.toml'
@@ -50,9 +51,7 @@ if __name__ == "__main__":
                     "--job.config_file",
                     train_config,
                     "--training.steps",
-                    "60000",
-                    "--checkpoint.load_at_step",
-                    "54000",
+                    "10000",
                 ]
             )
             print(" ".join(function.command))
