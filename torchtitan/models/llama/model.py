@@ -400,7 +400,7 @@ class Transformer(nn.Module):
             self.freqs_cis = self._precompute_freqs_cis()
         if self.tok_embeddings is not None:
             embed_std = 0.02
-            nn.init.normal_(self.tok_embeddings.weight, mean=0.0, std=embed_std)
+            nn.init.trunc_normal_(self.tok_embeddings.weight, mean=0.0, std=embed_std)
         for layer in self.layers.values():
             if layer is not None:
                 layer.init_weights()
