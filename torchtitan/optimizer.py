@@ -168,12 +168,6 @@ def build_lr_schedulers(optimizers, job_config: JobConfig) -> LambdaLR:
         warmup_steps = int(job_config.training.warmup_steps)
         post_warmup_steps = float(max(1, job_config.training.steps - warmup_steps))
 
-        # If decay steps is not set in config, decay will begin immediately after warmup
-        decay_steps = (
-            job_config.training.decay_steps
-            if job_config.training.decay_steps
-            else post_warmup_steps
-        )
         decay_steps_perc = job_config.training.decay_steps_perc
         num_decays = job_config.training.num_decays
         decay_type = Decay.from_string(job_config.training.decay_type)

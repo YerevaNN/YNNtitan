@@ -9,7 +9,7 @@ import submitit
 
 if __name__ == "__main__":
     executor = submitit.AutoExecutor(folder="~/slurm_jobs/titan/job_%j")
-    n_gpus = 6
+    n_gpus = 8
     node = "h100"
     executor.update_parameters(
         name="titan",
@@ -26,6 +26,7 @@ if __name__ == "__main__":
         for _ in range(1):
             # train_config = './train_configs/chemlactica_125m.toml'
             # train_config = './train_configs/chemlactica_1.3b.toml'
+            # train_config = "./train_configs/llama3_125m.toml"
             train_config = "./train_configs/llama3.2_1b.toml"
             # train_config = "./train_configs/llama3.2_3b.toml"
             # train_config = './train_configs/debug_model.toml'
@@ -49,6 +50,8 @@ if __name__ == "__main__":
                     "train.py",
                     "--job.config_file",
                     train_config,
+                    "--training.steps",
+                    "20000",
                 ]
             )
             print(" ".join(function.command))
