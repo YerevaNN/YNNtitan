@@ -26,7 +26,7 @@ tokenizer_path = "torchtitan/tokenizers/Llama-3.2-chem-1B-v1/"
 
 [optimizer]
 name = "AdamW"
-lr = 4e-4
+lr = 6e-4
 
 [training]
 batch_size = 2

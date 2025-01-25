@@ -50,8 +50,6 @@ if __name__ == "__main__":
                     "train.py",
                     "--job.config_file",
                     train_config,
-                    "--training.steps",
-                    "20000",
                 ]
             )
             print(" ".join(function.command))
