@@ -148,7 +148,7 @@ def model_args_to_hf_config(model_args):
 
     base_config_name = {
         "170M": "meta-llama/Llama-3.2-1B",
-        "350M": "meta-llama/Llama-3.2-1B",
+        "380M": "meta-llama/Llama-3.2-1B",
         "750M": "meta-llama/Llama-3.2-1B",
         "1B": "meta-llama/Llama-3.2-1B",
         "3B": "meta-llama/Llama-3.2-3B",

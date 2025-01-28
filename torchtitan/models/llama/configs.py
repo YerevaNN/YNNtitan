@@ -34,10 +34,10 @@ llama3_configs = {
         rope_theta=500000,
         share_embeddings=True,
     ),
-    "350M": ModelArgs(
+    "380M": ModelArgs(
         dim=1024,
         n_layers=16,
-        n_heads=24,
+        n_heads=16,
         n_kv_heads=8,
         rope_theta=500000,
         share_embeddings=True,

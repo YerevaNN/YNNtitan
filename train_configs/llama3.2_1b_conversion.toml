@@ -20,7 +20,7 @@ save_aim_folder = "aim"
 
 [model]
 name = "llama3"
-flavor = "170M"
+flavor = "350M"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
 tokenizer_path = "torchtitan/tokenizers/Llama-3.2-chem-1B-v1"
 # tokenizer_path = "meta-llama/Llama-3.2-1B"
@@ -52,9 +52,9 @@ enable_async_tensor_parallel = false
 enable_checkpoint = true
 # load_folder = "meta-llama/Llama-3.2-1B"
 # save_folder = "meta-llama/Llama-3.2-1B"
-load_folder = "yerevann/Llama-3.2-170M/782ca1a237d54c76a7ba8ea9"
+load_folder = "yerevann/Llama-3.2-350M/cea591215e7d4008b6fd6353"
 load_at_step = 20000
-save_folder = "hf/yerevann/Llama-3-170M/782ca1a237d54c76a7ba8ea9"
+save_folder = "hf/yerevann/Llama-3-350M/cea591215e7d4008b6fd6353"
 interval_type = "steps"
 interval = 1000
 model_weights_only = false
