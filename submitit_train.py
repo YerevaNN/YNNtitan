@@ -29,8 +29,8 @@ if __name__ == "__main__":
             # train_config = "./train_configs/llama3_170m.toml"
             # train_config = "./train_configs/llama3_380m.toml"
             # train_config = "./train_configs/llama3_750m.toml"
-            # train_config = "./train_configs/llama3.2_1b.toml"
-            train_config = "./train_configs/llama3.2_3b.toml"
+            train_config = "./train_configs/llama3_1b.toml"
+            # train_config = "./train_configs/llama3.2_3b.toml"
             # train_config = './train_configs/debug_model.toml'
             function = submitit.helpers.CommandFunction(
                 [
