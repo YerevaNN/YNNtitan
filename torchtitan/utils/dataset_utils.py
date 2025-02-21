@@ -3,7 +3,7 @@
 
 import orjson
 import json
-from .text_format_utils import generate_formatted_string, delete_empty_tags
+from .text_format_utils import generate_formatted_string, delete_empty_tags, generate_formatted_conformer_string
 import torch
 import os
 from pathlib import Path
@@ -25,6 +25,18 @@ def chemlactica_style_data_processing(sample_json, rng, representation_type):
         sample_json = json.loads(sample_json)
         compound = delete_empty_tags(sample_json)
         sample_json = generate_formatted_string(
+            compound, rng, representation_type
+        )
+    except Exception as e:
+        print(e)
+        sample_json = ""
+    return sample_json
+
+
+def conformer_data_processing(sample_json, rng, representation_type):
+    try:
+        compound = json.loads(sample_json)
+        sample_json = generate_formatted_conformer_string(
             compound, rng, representation_type
         )
     except Exception as e:
