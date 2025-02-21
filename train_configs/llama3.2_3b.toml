@@ -30,11 +30,13 @@ lr = 2e-4
 
 [training]
 batch_size = 6
-gradient_accumulation_steps = 28
+gradient_accumulation_steps = 20
 seq_len = 2048
 warmup_steps = 500  # lr scheduler warm up, normally 20% of the train steps
 max_norm = 1.0  # grad norm clipping
 steps = 20000
+decay_steps_perc = 0.1
+num_decays = 1
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = true
