@@ -17,7 +17,7 @@ if __name__ == "__main__":
         gpus_per_node=n_gpus,
         nodes=1,
         mem_gb=80,
-        cpus_per_task=n_gpus * 12,
+        cpus_per_task=n_gpus * 18,
         slurm_additional_parameters={"partition": node},
     )
 
@@ -26,8 +26,10 @@ if __name__ == "__main__":
         for _ in range(1):
             # train_config = './train_configs/chemlactica_125m.toml'
             # train_config = './train_configs/chemlactica_1.3b.toml'
-            # train_config = "./train_configs/llama3_125m.toml"
-            train_config = "./train_configs/llama3.2_1b.toml"
+            # train_config = "./train_configs/llama3_170m.toml"
+            # train_config = "./train_configs/llama3_380m.toml"
+            # train_config = "./train_configs/llama3_750m.toml"
+            train_config = "./train_configs/llama3_1b.toml"
             # train_config = "./train_configs/llama3.2_3b.toml"
             # train_config = './train_configs/debug_model.toml'
             function = submitit.helpers.CommandFunction(
@@ -50,8 +52,6 @@ if __name__ == "__main__":
                     "train.py",
                     "--job.config_file",
                     train_config,
-                    "--training.steps",
-                    "20000",
                 ]
             )
             print(" ".join(function.command))
