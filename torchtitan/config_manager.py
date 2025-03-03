@@ -230,19 +230,19 @@ class JobConfig:
         )
         self.parser.add_argument(
             "--training.num_decays",
-            type=Optional[float],
+            type=float,
             default=1,
             help="The number of total decays to perform throughout the training, following the WSD-S scheduler",
         )
         self.parser.add_argument(
             "--training.decay_steps",
-            type=Optional[int],
+            type=int,
             default=None,
             help="Steps for lr scheduler decay, default is decay starts immediately after warmup",
         )
         self.parser.add_argument(
             "--training.decay_steps_perc",
-            type=Optional[float],
+            type=float,
             default=1.0,
             help="The percentage of the steps to use as decay steps",
         )
@@ -662,7 +662,7 @@ class JobConfig:
 
         self.parser.add_argument(
             "--metrics.aim_experiment_name",
-            type=Optional[str],
+            type=str,
             default=None,
         )
         self.parser.add_argument(
