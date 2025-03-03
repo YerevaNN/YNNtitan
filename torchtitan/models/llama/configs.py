@@ -26,6 +26,22 @@ llama2_configs = {
 
 llama3_configs = {
     "debugmodel": ModelArgs(dim=256, n_layers=8, n_heads=16, rope_theta=500000),
+    "8M": ModelArgs(
+        dim=192,
+        n_layers=6,
+        n_heads=4,       # 192/4 = 48 per head (comparable in scale to the larger models)
+        n_kv_heads=2,    # preserving the 1:2 ratio with n_heads
+        rope_theta=500000,
+        share_embeddings=True,
+    ),
+    "80M": ModelArgs(
+        dim=512,
+        n_layers=8,
+        n_heads=8,       # 512/8 = 64 per head
+        n_kv_heads=4,    # keeping the 1:2 ratio relative to n_heads
+        rope_theta=500000,
+        share_embeddings=True,
+    ),
     "170M": ModelArgs(
         dim=768,
         n_layers=8,
