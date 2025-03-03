@@ -57,24 +57,28 @@ def generate_formatted_conformer_string(compound_json, rng, representation_type)
     canonical_smiles = compound_json.get("canonical_smiles", "")
     canonical_smiles = f"[SMILES]{canonical_smiles}[/SMILES]"
     
-    conformers = compound_json.get("conformers", "")
-    label = compound_json.get("pcqm4v2_label", "")
+    embedded_smiles = compound_json.get("embedded_smiles")
+    embedded_smiles = f"[CONFORMER]{embedded_smiles}[/CONFORMER]"
+    
+    compound_formatted_string = canonical_smiles + embedded_smiles
+    # conformers = compound_json.get("conformers", "")
+    # label = compound_json.get("pcqm4v2_label", "")
 
-    key_value_pairs = []
-    compound_formatted_string = ""
+    # key_value_pairs = []
+    # compound_formatted_string = ""
 
-    if rng.integers(2) == 0:
-        compound_formatted_string += canonical_smiles
-    else:
-        key_value_pairs.append(canonical_smiles)
+    # if rng.integers(2) == 0:
+    #     compound_formatted_string += canonical_smiles
+    # else:
+    #     key_value_pairs.append(canonical_smiles)
 
-    key_value_pairs.append(f"[CONFORMER]{conformers['embedded_smiles']}[/CONFORMER]")
-    if label != "nan":
-        key_value_pairs.append(f"[PROPERTY]{label:.2f}[/PROPERTY]" )
+    # key_value_pairs.append(f"[CONFORMER]{conformers['embedded_smiles']}[/CONFORMER]")
+    # if label != "nan":
+    #     key_value_pairs.append(f"[PROPERTY]{label:.2f}[/PROPERTY]" )
 
-    rng.shuffle(key_value_pairs)
-    for kv in key_value_pairs:
-        compound_formatted_string += kv
+    # rng.shuffle(key_value_pairs)
+    # for kv in key_value_pairs:
+    #     compound_formatted_string += kv
 
     return compound_formatted_string
 
