@@ -156,7 +156,7 @@ def model_args_to_hf_config(model_args):
         "3B": "meta-llama/Llama-3.2-3B",
         "7B": "meta-llama/Llama-3.2-7B",
     }[model_size]
-    if model_size in ["8", "80", "170M", "380M", "750M"]:
+    if model_size in ["8M", "80M", "170M", "380M", "750M"]:
         llama_config = llama3_configs[model_size]
         base_config = AutoConfig.from_pretrained(
             base_config_name,
