@@ -20,7 +20,7 @@ save_aim_folder = "aim"
 
 [model]
 name = "llama3"
-flavor = "1B"
+flavor = "750M"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
 tokenizer_path = "torchtitan/tokenizers/Llama-3.2-chem-1B-v1/"
 
@@ -29,8 +29,8 @@ name = "AdamW"
 lr = 4e-4
 
 [training]
-batch_size = 11
-gradient_accumulation_steps = 11
+batch_size = 12
+gradient_accumulation_steps = 10
 seq_len = 2048
 max_norm = 1.0  # grad norm clipping
 warmup_steps = 500  # lr scheduler warm up, normally 20% of the train steps
@@ -58,9 +58,8 @@ enable_async_tensor_parallel = false
 
 [checkpoint]
 enable_checkpoint = true
-save_folder = "yerevann/Llama-3.2-1B"
-# load_folder = "meta-llama/Llama-3.2-1B"
-# load_folder = "yerevann/Llama-3.2-1B/b17b0e8b713f4abeba404ddf"
+save_folder = "yerevann/Llama-3.2-750M"
+# load_folder = "yerevann/Llama-3.2-750M"
 # load_at_step = 0
 interval_type = "steps"
 interval = 2000

@@ -20,7 +20,7 @@ save_aim_folder = "aim"
 
 [model]
 name = "llama3"
-flavor = "1B"
+flavor = "3B"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
 tokenizer_path = "torchtitan/tokenizers/Llama-3.2-chem-1B-v1"
 # tokenizer_path = "meta-llama/Llama-3.2-1B"

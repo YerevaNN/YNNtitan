@@ -243,6 +243,7 @@ class JobConfig:
         self.parser.add_argument(
             "--training.decay_steps_perc",
             type=float,
+            type=float,
             default=1.0,
             help="The percentage of the steps to use as decay steps",
         )

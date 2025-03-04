@@ -13,7 +13,7 @@ except ModuleNotFoundError:
 
 @cache
 def read_special_tags():
-    with open(os.path.expanduser("~/YNNtitan/torchtitan/tokenizers/special_tokens.toml"), "rb") as f:
+    with open(os.path.expanduser("torchtitan/tokenizers/special_tokens.toml"), "rb") as f:
         special_tokens = tomllib.load(f)
 
     return special_tokens
