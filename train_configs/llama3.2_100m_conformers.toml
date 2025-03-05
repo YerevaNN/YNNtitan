@@ -20,7 +20,7 @@ save_aim_folder = "aim_conformers"
 
 [model]
 name = "llama3"
-flavor = "80M"
+flavor = "100M"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
 tokenizer_path = "torchtitan/tokenizers/Llama-3.2-chem-1B-v1/"
 
@@ -58,9 +58,9 @@ enable_async_tensor_parallel = false
 
 [checkpoint]
 enable_checkpoint = true
-save_folder = "yerevann/Llama-3.2-80M_conformers"
-load_folder = "meta-llama/Llama-3.2-80M"
-# load_folder = "yerevann/Llama-3.2-80M/7b98d06b463e45ea8db87d05"
+save_folder = "yerevann/Llama-3.2-100M_conformers"
+load_folder = "meta-llama/Llama-3.2-100M"
+# load_folder = "yerevann/Llama-3.2-10s0M/7b98d06b463e45ea8db87d05"
 load_at_step = 0
 interval_type = "steps"
 interval = 5200
