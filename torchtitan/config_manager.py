@@ -230,7 +230,7 @@ class JobConfig:
         )
         self.parser.add_argument(
             "--training.num_decays",
-            type=float,
+            type=int,
             default=1,
             help="The number of total decays to perform throughout the training, following the WSD-S scheduler",
         )
@@ -242,7 +242,6 @@ class JobConfig:
         )
         self.parser.add_argument(
             "--training.decay_steps_perc",
-            type=float,
             type=float,
             default=1.0,
             help="The percentage of the steps to use as decay steps",
