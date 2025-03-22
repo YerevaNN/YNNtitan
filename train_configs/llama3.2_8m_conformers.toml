@@ -1,0 +1,76 @@
+# torchtitan Config.toml
+
+[job]
+dump_folder = "/nfs/h100/raid/chem/checkpoints"
+description = "Llama 3.2 training"
+use_for_integration_test = false
+
+[profiling]
+enable_profiling = false
+save_traces_folder = "profile_trace"
+profile_freq = 10
+enable_memory_snapshot = false
+save_memory_snapshot_folder = "memory_snapshot"
+
+[metrics]
+log_freq = 1
+enable_color_printing = true
+enable_aim = true
+save_aim_folder = "aim_conformers"
+
+[model]
+name = "llama3"
+flavor = "8M"
+norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
+tokenizer_path = "torchtitan/tokenizers/Llama-3.2-chem-1B-v1/"
+
+[optimizer]
+name = "AdamW"
+lr = 4e-4
+
+[training]
+batch_size = 4
+gradient_accumulation_steps = 1
+seq_len = 2048
+warmup_steps = 1  # lr scheduler warm up, normally 20% of the train steps
+max_norm = 1.0  # grad norm clipping
+steps = 16800
+data_parallel_degree = -1
+tensor_parallel_degree = 1
+compile = true
+# dataset = "c4"  # supported datasets: c4_test (2K), c4 (177M)
+# dataset = "chemlactica_train_mini"  # supported datasets: c4_test (2K), c4 (177M), chemlactica_train_mini (4K)
+dataset = "conformers_train"
+data_processing_style="conformer_style"
+representation_type = "SMILES"
+
+[validation]
+valid_freq = 1000
+enable_valid = true
+dataset = "conformers_valid"  # supported datasets: chemlactica_valid_mini
+
+[dataloader]
+num_workers = 1
+
+[experimental]
+pipeline_parallel_degree = 1
+enable_async_tensor_parallel = false
+
+[checkpoint]
+enable_checkpoint = true
+save_folder = "yerevann/Llama-3.2-8M_conformers"
+# load_folder = "meta-llama/Llama-3.2-8M"
+# load_folder = "yerevann/Llama-3.2-8M/7b98d06b463e45ea8db87d05"
+load_at_step = 0
+interval_type = "steps"
+interval = 16800
+model_weights_only = false
+export_dtype = "float32"
+async_mode = "async_with_pinned_mem"  # ["disabled", "async", "async_with_pinned_mem"]
+
+[activation_checkpoint]
+mode = 'none'  # ['none', 'selective', 'full']
+selective_ac_option = '2'  # 'int' = ac every positive int layer or 'op', ac based on ops policy
+
+[float8]
+enable_float8_linear = false
