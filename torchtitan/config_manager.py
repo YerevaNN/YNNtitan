@@ -697,10 +697,13 @@ class JobConfig:
         self.args_dict = self._args_to_two_level_dict(args)
         if config_file is not None:
             try:
+                from omegaconf import OmegaConf
                 with open(config_file, "rb") as f:
                     for k, v in tomllib.load(f).items():
+                        # resolve the config file and convert to dict
+                        resolved_v = OmegaConf.to_container(OmegaConf.create(v), resolve=True)
                         # to prevent overwrite of non-specified keys
-                        self.args_dict[k] |= v
+                        self.args_dict[k] |= resolved_v
             except (FileNotFoundError, tomllib.TOMLDecodeError) as e:
                 logger.exception(
                     f"Error while loading the configuration file: {config_file}"

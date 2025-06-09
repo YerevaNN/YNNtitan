@@ -1,7 +1,7 @@
 # torchtitan Config.toml
 
 [job]
-dump_folder = "/nfs/h100/raid/chem/checkpoints"
+dump_folder = "${oc.env:DUMP_DIR}"
 description = "Llama 3.2 training"
 use_for_integration_test = false
 
@@ -22,8 +22,8 @@ save_aim_folder = "aim"
 name = "llama3"
 flavor = "3B"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
-tokenizer_path = "torchtitan/tokenizers/Llama-3.2-chem-1B-v1"
-# tokenizer_path = "meta-llama/Llama-3.2-1B"
+# tokenizer_path = "torchtitan/tokenizers/Llama-3.2-chem-1B-v1"
+tokenizer_path = "meta-llama/Llama-3.2-1B"
 
 [optimizer]
 name = "AdamW"
@@ -52,9 +52,9 @@ enable_async_tensor_parallel = false
 enable_checkpoint = true
 # load_folder = "meta-llama/Llama-3.2-1B"
 # save_folder = "meta-llama/Llama-3.2-1B"
-load_folder = "yerevann/Llama-3.2-3B/2997328af3694a2794c33a49"
-load_at_step = 20000
-save_folder = "hf/yerevann/Llama-3-3.2B/2997328af3694a2794c33a49"
+# load_folder = "yerevann/Llama-3.2-3B/2997328af3694a2794c33a49"
+load_at_step = 0
+save_folder = "hf-4.52.4/yerevann/Llama-3-3.2B/2997328af3694a2794c33a49"
 interval_type = "steps"
 interval = 1000
 model_weights_only = false
