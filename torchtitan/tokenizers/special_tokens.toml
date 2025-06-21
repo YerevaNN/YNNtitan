@@ -17,7 +17,6 @@ end = "[/RELATED]"
 [related]
 start = "[SIMILAR]"
 end = "[/SIMILAR]"
-type = "float"
 
 [experimental]
 start = "[PROPERTY]"

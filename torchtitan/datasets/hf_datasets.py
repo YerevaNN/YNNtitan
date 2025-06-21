@@ -25,7 +25,11 @@ except ImportError as e:
 
 from torchtitan.logging import logger
 from torchtitan.tokenizers.tokenizer import Tokenizer
-from torchtitan.utils.dataset_utils import chemlactica_style_data_processing, conformer_data_processing
+from torchtitan.utils.dataset_utils import (
+    chemlactica_style_data_processing,
+    conformer_data_processing,
+    property_names_as_tags_processing
+)
 
 from datasets import load_dataset
 from datasets.distributed import split_dataset_by_node
@@ -43,11 +47,17 @@ _supported_datasets = {
     # valid
     "chemlactica_valid": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form",
     "chemlactica_valid_mini": "test/assets/chemlactica_valid_mini",
+    
+    # pubchem dataset
+    "pubchem_train": f"{os.environ['PUBCHEM_DATA_DIR']}/train",
+    "pubchem_valid": f"{os.environ['PUBCHEM_DATA_DIR']}/validation",
 }
 
 _supported_data_processing_styles = {
     "chemlactica_style": chemlactica_style_data_processing,
-    "conformer_style": conformer_data_processing
+    "conformer_style": conformer_data_processing,
+    # property names as tags
+    "property_names_as_tags": property_names_as_tags_processing,
 }
 
 
@@ -182,7 +192,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
                         sample_json["text"], self.rng, self.representation_type
                     )
                     if self.number_of_samples_to_log > 0:
-                        logger.info(f"Sample: {sample_text}")
+                        logger.info(f"Sample: {sample_json['text']} {sample_text}")
                         self.number_of_samples_to_log -= 1
                     sample_tokens = self._tokenizer.encode(
                         sample_text, bos=True, eos=True

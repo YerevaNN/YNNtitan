@@ -2,7 +2,7 @@
 # All rights reserved
 from torchtitan.logging import logger
 from functools import cache
-import safe
+# import safe
 
 import os
 try:
@@ -32,7 +32,7 @@ def sample_special_tags(molecular_repr, rng, sample_p=0.1):
     # sample the properties
     do_sample = rng.random(len(sampled_properties)) < sample_p
     sampled_properties = [p for i, p in enumerate(sampled_properties) if do_sample[i]]
-
+    
     return {key: read_special_tags()[key] for key in included_properties + sampled_properties}
 
 
@@ -133,5 +133,46 @@ def format_key_value(key, value, rng, representation_type):
                 formatted_string = f"{start_tag}{value}{end_tag}"
     except Exception as e:
         logger.info(e)
+
+    return formatted_string
+
+
+def sample_dict_to_formatted_string(sample_dict, rng):
+    keys = list(sample_dict.keys())
+    rng.shuffle(keys)
+
+    special_tags = sample_special_tags("SMILES", rng, sample_p=1.0)
+    formatted_string = ""
+    for key in keys:
+        try:
+            # if the key is not in the sampled tags or special tags is empty, skip it
+            if key not in special_tags:
+                continue
+
+            start_tag = special_tags[key]['start']
+            end_tag = special_tags[key]['end']
+            value = sample_dict[key]
+            if key == "SMILES":
+                formatted_string += f"{start_tag}{value}{end_tag}"
+            elif key == "related":
+                random_inds = rng.permutation(len(value))[:10]
+                mols_sim_pairs = [value[i] for i in random_inds]
+                for pair in mols_sim_pairs:
+                    rounded_sim = f"{float(pair['similarity']):.2f}"
+                    assert len(rounded_sim.split(".")[-1]) == 2
+                    formatted_string += f"{start_tag}{pair['SMILES']} {rounded_sim}{end_tag}"
+            elif key == "experimental":
+                for pair in value:
+                    formatted_string += f"[{pair['PROPERTY_NAME']}]{pair['PROPERTY_VALUE']}[/{pair['PROPERTY_NAME']}]"
+            elif key == "synonyms":
+                for val in value:
+                    formatted_string += f"{start_tag}{val['name']}{end_tag}"  # noqa
+            else:
+                if special_tags[key].get("type") == "float":
+                    value = f"{float(value):.2f}"
+                    assert len(value.split(".")[-1]) == 2
+                formatted_string += f"{start_tag}{value}{end_tag}"
+        except Exception as e:
+            logger.info(e)
 
     return formatted_string

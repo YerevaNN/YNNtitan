@@ -1,9 +1,15 @@
 # Adapted from https://github.com/YerevaNN/ChemLactica/blob/main/chemlactica/utils/dataset_utils.py
 # All rights reserved
 
-import orjson
+# import orjson
 import json
-from .text_format_utils import generate_formatted_string, delete_empty_tags, generate_formatted_conformer_string
+from .text_format_utils import (
+    generate_formatted_string,
+    delete_empty_tags,
+    generate_formatted_conformer_string,
+    sample_dict_to_formatted_string,
+)
+from torchtitan.logging import logger
 import torch
 import os
 from pathlib import Path
@@ -54,3 +60,13 @@ def sft_formatting_prompts_func(example):
         )
         output_texts.append(text)
     return output_texts
+
+
+def property_names_as_tags_processing(sample_json, rng, representation_type):
+    try:
+        sample_dict = json.loads(sample_json)
+        sample_dict = delete_empty_tags(sample_dict)
+        return sample_dict_to_formatted_string(sample_dict, rng)
+    except Exception as e:
+        logger.info(e)
+    return ""
