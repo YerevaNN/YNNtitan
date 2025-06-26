@@ -28,7 +28,7 @@ from torchtitan.tokenizers.tokenizer import Tokenizer
 from torchtitan.utils.dataset_utils import (
     chemlactica_style_data_processing,
     conformer_data_processing,
-    property_names_as_tags_processing
+    pubchem_data_processing,
 )
 
 from datasets import load_dataset
@@ -47,17 +47,16 @@ _supported_datasets = {
     # valid
     "chemlactica_valid": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form",
     "chemlactica_valid_mini": "test/assets/chemlactica_valid_mini",
-    
     # pubchem dataset
-    "pubchem_train": f"{os.environ['PUBCHEM_DATA_DIR']}/train",
-    "pubchem_valid": f"{os.environ['PUBCHEM_DATA_DIR']}/validation",
+    "pubchem_train": f"{os.environ['PUBCHEM_DATA_DIR']}/train_rdkit_computed_rel+form",
+    "pubchem_valid": f"{os.environ['PUBCHEM_DATA_DIR']}",
 }
 
 _supported_data_processing_styles = {
     "chemlactica_style": chemlactica_style_data_processing,
     "conformer_style": conformer_data_processing,
     # property names as tags
-    "property_names_as_tags": property_names_as_tags_processing,
+    "pubchem_data_processing": pubchem_data_processing,
 }
 
 

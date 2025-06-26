@@ -17,6 +17,7 @@ end = "[/RELATED]"
 [related]
 start = "[SIMILAR]"
 end = "[/SIMILAR]"
+range = [0, 1]
 
 [experimental]
 start = "[PROPERTY]"
@@ -26,99 +27,122 @@ end = "[/PROPERTY]"
 start = "[SAS]"
 end = "[/SAS]"
 type = "float"
+range = [1, 10]
 
 [WEIGHT]
 start = "[WEIGHT]"
 end = "[/WEIGHT]"
 type = "float"
+range = [150, 2100]
 
 [TPSA]
 start = "[TPSA]"
 end = "[/TPSA]"
 type = "float"
+range = [9, 400]
 
 [CLOGP]
 start = "[CLOGP]"
 end = "[/CLOGP]"
 type = "float"
+range = [-2, 24]
 
 [QED]
 start = "[QED]"
 end = "[/QED]"
 type = "float"
+range = [0, 1]
 
 [NUMHDONORS]
 start = "[NUMHDONORS]"
 end = "[/NUMHDONORS]"
+range = [1, 10]
 
 [NUMHACCEPTORS]
 start = "[NUMHACCEPTORS]"
 end = "[/NUMHACCEPTORS]"
+range = [1, 23]
 
 [NUMHETEROATOMS]
 start = "[NUMHETEROATOMS]"
 end = "[/NUMHETEROATOMS]"
+range = [2, 33]
 
 [NUMROTATABLEBONDS]
 start = "[NUMROTATABLEBONDS]"
 end = "[/NUMROTATABLEBONDS]"
+range = [1, 45]
 
 [NOCOUNT]
 start = "[NOCOUNT]"
 end = "[/NOCOUNT]"
+range = [1, 28]
 
 [NHOHCOUNT]
 start = "[NHOHCOUNT]"
 end = "[/NHOHCOUNT]"
+range = [1, 11]
 
 [RINGCOUNT]
 start = "[RINGCOUNT]"
 end = "[/RINGCOUNT]"
+range = [1, 13]
 
 [HEAVYATOMCOUNT]
 start = "[HEAVYATOMCOUNT]"
 end = "[/HEAVYATOMCOUNT]"
+range = [12, 123]
 
 [FRACTIONCSP3]
 start = "[FRACTIONCSP3]"
 end = "[/FRACTIONCSP3]"
 type = "float"
+range = [0, 1]
 
 [NUMAROMATICRINGS]
 start = "[NUMAROMATICRINGS]"
 end = "[/NUMAROMATICRINGS]"
+range = [1, 9]
 
 [NUMSATURATEDRINGS]
 start = "[NUMSATURATEDRINGS]"
 end = "[/NUMSATURATEDRINGS]"
+range = [1, 6]
 
 [NUMAROMATICHETEROCYCLES]
 start = "[NUMAROMATICHETEROCYCLES]"
 end = "[/NUMAROMATICHETEROCYCLES]"
+range = [1, 7]
 
 [NUMAROMATICCARBOCYCLES]
 start = "[NUMAROMATICCARBOCYCLES]"
 end = "[/NUMAROMATICCARBOCYCLES]"
+range = [1, 8]
 
 [NUMSATURATEDHETEROCYCLES]
 start = "[NUMSATURATEDHETEROCYCLES]"
 end = "[/NUMSATURATEDHETEROCYCLES]"
+range = [1, 5]
 
 [NUMSATURATEDCARBOCYCLES]
 start = "[NUMSATURATEDCARBOCYCLES]"
 end = "[/NUMSATURATEDCARBOCYCLES]"
+range = [1, 8]
 
 [NUMALIPHATICRINGS]
 start = "[NUMALIPHATICRINGS]"
 end = "[/NUMALIPHATICRINGS]"
+range = [1, 17]
 
 [NUMALIPHATICHETEROCYCLES]
 start = "[NUMALIPHATICHETEROCYCLES]"
 end = "[/NUMALIPHATICHETEROCYCLES]"
+range = [1, 10]
 
 [NUMALIPHATICCARBOCYCLES]
 start = "[NUMALIPHATICCARBOCYCLES]"
 end = "[/NUMALIPHATICCARBOCYCLES]"
+range = [1, 8]
 
 [IUPAC]
 start = "[IUPAC]"

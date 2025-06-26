@@ -1,10 +1,18 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 # Adapted from https://github.com/YerevaNN/ChemLactica/blob/main/chemlactica/utils/text_format_utils.py
 # All rights reserved
-from torchtitan.logging import logger
-from functools import cache
 # import safe
 
 import os
+from functools import cache
+
+from torchtitan.logging import logger
+
 try:
     import tomllib
 except ModuleNotFoundError:
@@ -13,7 +21,9 @@ except ModuleNotFoundError:
 
 @cache
 def read_special_tags():
-    with open(os.path.expanduser("torchtitan/tokenizers/special_tokens.toml"), "rb") as f:
+    with open(
+        os.path.expanduser("torchtitan/tokenizers/special_tokens.toml"), "rb"
+    ) as f:
         special_tokens = tomllib.load(f)
 
     return special_tokens
@@ -21,9 +31,21 @@ def read_special_tags():
 
 @cache
 def get_tags_split(molecular_repr):
-    included_properties = {molecular_repr, "related", "SAS", "WEIGHT", "TPSA", "CLOGP", "QED", "RINGCOUNT", "formula"}
+    included_properties = {
+        molecular_repr,
+        "related",
+        "SAS",
+        "WEIGHT",
+        "TPSA",
+        "CLOGP",
+        "QED",
+        "RINGCOUNT",
+        "formula",
+    }
     all_properties = set(read_special_tags().keys())
-    return list(included_properties), list(all_properties.difference(included_properties))
+    return list(included_properties), list(
+        all_properties.difference(included_properties)
+    )
 
 
 def sample_special_tags(molecular_repr, rng, sample_p=0.1):
@@ -32,8 +54,11 @@ def sample_special_tags(molecular_repr, rng, sample_p=0.1):
     # sample the properties
     do_sample = rng.random(len(sampled_properties)) < sample_p
     sampled_properties = [p for i, p in enumerate(sampled_properties) if do_sample[i]]
-    
-    return {key: read_special_tags()[key] for key in included_properties + sampled_properties}
+
+    return {
+        key: read_special_tags()[key]
+        for key in included_properties + sampled_properties
+    }
 
 
 def delete_empty_tags(compound_json):
@@ -45,18 +70,16 @@ def delete_empty_tags(compound_json):
 
 def convert_representation(smiles, representation_type):
     try:
-        return {
-            "SMILES": lambda x: x,
-            "SAFE": safe.encode
-        }[representation_type](smiles)
+        return {"SMILES": lambda x: x, "SAFE": safe.encode}[representation_type](smiles)
     except Exception as e:
         # logger.info(f"{e}. Could not encode molecule {smiles} with representation {representation_type}")
         return smiles
 
+
 def generate_formatted_conformer_string(compound_json, rng, representation_type):
     canonical_smiles = compound_json.get("canonical_smiles", "")
     canonical_smiles = f"[SMILES]{canonical_smiles}[/SMILES]"
-    
+
     conformers = compound_json.get("conformers", "")
     label = compound_json.get("pcqm4v2_label", "")
 
@@ -70,13 +93,14 @@ def generate_formatted_conformer_string(compound_json, rng, representation_type)
 
     key_value_pairs.append(f"[CONFORMER]{conformers['embedded_smiles']}[/CONFORMER]")
     if label != "nan":
-        key_value_pairs.append(f"[PROPERTY]{label:.2f}[/PROPERTY]" )
+        key_value_pairs.append(f"[PROPERTY]{label:.2f}[/PROPERTY]")
 
     rng.shuffle(key_value_pairs)
     for kv in key_value_pairs:
         compound_formatted_string += kv
 
     return compound_formatted_string
+
 
 def generate_formatted_string(compound_json, rng, representation_type):
     key_value_pairs = []
@@ -87,17 +111,19 @@ def generate_formatted_string(compound_json, rng, representation_type):
 
     if rng.integers(2) == 0:
         if value:
-            key_value_pairs.append(format_key_value(key, value, rng, representation_type))
+            key_value_pairs.append(
+                format_key_value(key, value, rng, representation_type)
+            )
             del compound_json[key]
 
     keys = list(compound_json.keys())
     rng.shuffle(keys)
 
     for key in keys:
-        key_value_pairs.append(format_key_value(key, compound_json[key], rng, representation_type))
-    compound_formatted_string = (
-        "".join(key_value_pairs)
-    )
+        key_value_pairs.append(
+            format_key_value(key, compound_json[key], rng, representation_type)
+        )
+    compound_formatted_string = "".join(key_value_pairs)
     return compound_formatted_string
 
 
@@ -109,8 +135,8 @@ def format_key_value(key, value, rng, representation_type):
     try:
         special_tags = sample_special_tags(representation_type, rng)
         if special_tags.get(key):
-            start_tag = special_tags[key]['start']
-            end_tag = special_tags[key]['end']
+            start_tag = special_tags[key]["start"]
+            end_tag = special_tags[key]["end"]
             if key == representation_type:
                 formatted_string = f"{start_tag}{convert_representation(value, representation_type)}{end_tag}"
             elif key == "related":
@@ -118,8 +144,12 @@ def format_key_value(key, value, rng, representation_type):
                     value = rng.choice(value, size=10, replace=False, shuffle=False)
                 for pair in value:
                     rounded_sim = "{:.2f}".format(float(pair["similarity"]))
-                    mol_repr = convert_representation(pair["SMILES"], representation_type)
-                    formatted_string += f"{start_tag}{mol_repr} {rounded_sim}{end_tag}"  # noqa
+                    mol_repr = convert_representation(
+                        pair["SMILES"], representation_type
+                    )
+                    formatted_string += (
+                        f"{start_tag}{mol_repr} {rounded_sim}{end_tag}"  # noqa
+                    )
             elif key == "experimental":
                 for pair in value:
                     formatted_string += f"{start_tag}{pair['PROPERTY_NAME']} {pair['PROPERTY_VALUE']}{end_tag}"  # noqa
@@ -138,40 +168,75 @@ def format_key_value(key, value, rng, representation_type):
 
 
 def sample_dict_to_formatted_string(sample_dict, rng):
-    keys = list(sample_dict.keys())
-    rng.shuffle(keys)
+    tags_dict = sample_special_tags("SMILES", rng, sample_p=0.1)
+    tags = list(tags_dict.keys())
+    rng.shuffle(tags)  # shuffle the tags to include
 
-    special_tags = sample_special_tags("SMILES", rng, sample_p=1.0)
+    p_range = 0.5  # probability of property specifying range
+    smiles_encountered = False
     formatted_string = ""
-    for key in keys:
+    for tag in tags:
         try:
-            # if the key is not in the sampled tags or special tags is empty, skip it
-            if key not in special_tags:
+            # if the tag does not exist in the sample, move to the next tag
+            if tag not in sample_dict.keys():
                 continue
 
-            start_tag = special_tags[key]['start']
-            end_tag = special_tags[key]['end']
-            value = sample_dict[key]
-            if key == "SMILES":
+            start_tag = tags_dict[tag]["start"]
+            end_tag = tags_dict[tag]["end"]
+            value = sample_dict[tag]
+            if tag == "SMILES":
                 formatted_string += f"{start_tag}{value}{end_tag}"
-            elif key == "related":
+                smiles_encountered = True
+            elif tag == "related":
                 random_inds = rng.permutation(len(value))[:10]
                 mols_sim_pairs = [value[i] for i in random_inds]
                 for pair in mols_sim_pairs:
-                    rounded_sim = f"{float(pair['similarity']):.2f}"
-                    assert len(rounded_sim.split(".")[-1]) == 2
-                    formatted_string += f"{start_tag}{pair['SMILES']} {rounded_sim}{end_tag}"
-            elif key == "experimental":
+                    # range logic for similarity
+                    min_value, max_value = tags_dict[tag]["range"]
+                    if (
+                        not smiles_encountered
+                        and rng.random() < p_range
+                        and min_value <= pair["similarity"] <= max_value
+                    ):
+                        e1 = rng.uniform(min_value, pair["similarity"])
+                        e2 = rng.uniform(pair["similarity"], max_value)
+                        sim_value = f"[{e1:.2f},{e2:.2f}]"
+                    else:
+                        sim_value = f"{float(pair['similarity']):.2f}"
+                    formatted_string += (
+                        f"{start_tag}{pair['SMILES']} {sim_value}{end_tag}"
+                    )
+            elif tag == "experimental":
                 for pair in value:
                     formatted_string += f"[{pair['PROPERTY_NAME']}]{pair['PROPERTY_VALUE']}[/{pair['PROPERTY_NAME']}]"
-            elif key == "synonyms":
+            elif tag == "synonyms":
                 for val in value:
                     formatted_string += f"{start_tag}{val['name']}{end_tag}"  # noqa
             else:
-                if special_tags[key].get("type") == "float":
-                    value = f"{float(value):.2f}"
-                    assert len(value.split(".")[-1]) == 2
-                formatted_string += f"{start_tag}{value}{end_tag}"
+                # if the property has a range, it can be specified as a range
+                if tags_dict[tag].get("range"):
+                    min_value, max_value = tags_dict[tag]["range"]
+
+                if (
+                    tags_dict[tag].get("range")
+                    and not smiles_encountered
+                    and rng.random() < p_range
+                    and min_value <= value <= max_value
+                ):
+                    if tags_dict[tag].get("type") == "float":
+                        e1 = rng.uniform(min_value, value)
+                        e2 = rng.uniform(value, max_value)
+                        prop_value = f"[{e1:.2f},{e2:.2f}]"
+                    else:
+                        e1 = rng.integers(min_value, value, endpoint=True)
+                        e2 = rng.integers(value, max_value, endpoint=True)
+                        prop_value = f"[{e1},{e2}]"
+                else:
+                    if tags_dict[tag].get("type") == "float":
+                        prop_value = f"{value:.2f}"
+                    else:
+                        prop_value = value
+                formatted_string += f"{start_tag}{prop_value}{end_tag}"
         except Exception as e:
             logger.info(e)
 
