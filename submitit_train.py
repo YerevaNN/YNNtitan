@@ -9,15 +9,15 @@ import submitit
 
 if __name__ == "__main__":
     executor = submitit.AutoExecutor(folder="~/slurm_jobs/titan/job_%j")
-    n_gpus = 8
+    n_gpus = 6
     node = "h100"
     executor.update_parameters(
         name="titan",
         timeout_min=24 * 24 * 60,
         gpus_per_node=n_gpus,
         nodes=1,
-        mem_gb=80,
-        cpus_per_task=n_gpus * 18,
+        mem_gb=200,
+        cpus_per_task=184,
         slurm_additional_parameters={"partition": node},
     )
 
@@ -30,6 +30,7 @@ if __name__ == "__main__":
             # train_config = "./train_configs/llama3_380m.toml"
             # train_config = "./train_configs/llama3_750m.toml"
             train_config = "./train_configs/llama3_1b_pubchem.toml"
+            # train_config = "./train_configs/llama3_380m_pubchem.toml"
             # train_config = "./train_configs/llama3.2_3b.toml"
             # train_config = './train_configs/debug_model.toml'
             function = submitit.helpers.CommandFunction(
