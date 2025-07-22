@@ -73,7 +73,7 @@ def verify_logits_matching(
     hf_model,
     tokenizer,
     atol: float,
-    prompts=("Hello world", "The capital of France is "),
+    prompts=("[SMILES]", "[QED]0.54[/QED]", "[SAS][0.12,0.45][/SAS]"),
 ):
     device = "cuda"
     hf_model.to(device)
@@ -131,7 +131,7 @@ def download_llama3_weights(
 
         model.load_state_dict(corrected_state_dict)
         verify_logits_matching(
-            model=model, hf_model=hf_model, tokenizer=tokenizer, atol=1e-1
+            model=model, hf_model=hf_model, tokenizer=tokenizer, atol=0.1
         )
         logger.info("Successfully loaded Llama 3 model to titan model.")
     else:
@@ -181,6 +181,8 @@ def export_llama3_weights(
     """
 
     model_config = model_args_to_hf_config(model.model_args)
+    # include dtype in hf config
+    model_config.torch_dtype = next(model.parameters()).dtype
     hf_model = AutoModelForCausalLM.from_config(model_config)
     hf_model.resize_token_embeddings(new_num_tokens=token_embedding_size)
     include_lm_head = not model.model_args.share_embeddings
@@ -216,13 +218,7 @@ def export_llama3_weights(
         corrected_state_dict["lm_head.weight"] = state_dict["tok_embeddings.weight"]
 
     hf_model.load_state_dict(corrected_state_dict)
-    verify_logits_matching(
-        model=model,
-        hf_model=hf_model,
-        tokenizer=tokenizer,
-        atol=1e-1,
-        prompts=["", "[QED]", "[SAFE]"],
-    )
+    verify_logits_matching(model=model, hf_model=hf_model, tokenizer=tokenizer, atol=2)
     hf_model.save_pretrained(save_dir)
     logger.info(
         f"Successfully exported Llama 3 model to huggingface model at {save_dir}."

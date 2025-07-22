@@ -20,7 +20,7 @@ save_aim_folder = "aim"
 
 [model]
 name = "llama3"
-flavor = "3B"
+flavor = "1B"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
 # tokenizer_path = "torchtitan/tokenizers/Llama-3.2-chem-1B-v1"
 tokenizer_path = "meta-llama/Llama-3.2-1B"
@@ -50,13 +50,11 @@ enable_async_tensor_parallel = false
 
 [checkpoint]
 enable_checkpoint = true
-# load_folder = "meta-llama/Llama-3.2-1B"
-# save_folder = "meta-llama/Llama-3.2-1B"
-# load_folder = "yerevann/Llama-3.2-3B/2997328af3694a2794c33a49"
-load_at_step = 0
-save_folder = "hf-4.52.4/yerevann/Llama-3-3.2B/2997328af3694a2794c33a49"
+load_folder = "checkpoints/yerevann/Llama-3-1.3B/3023be15c58140c288bc8054"
+load_at_step = 40000
+save_folder = "checkpoints/hf-4.52.4/yerevann/Llama-3-1.3B/3023be15c58140c288bc8054"
 interval_type = "steps"
-interval = 1000
+interval = 4000
 model_weights_only = false
 export_dtype = "float32"
 async_mode = "async_with_pinned_mem"  # ["disabled", "async", "async_with_pinned_mem"]

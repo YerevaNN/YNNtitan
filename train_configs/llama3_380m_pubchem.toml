@@ -22,7 +22,7 @@ save_aim_folder = "aim"
 name = "llama3"
 flavor = "380M"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
-tokenizer_path = "meta-llama/Llama-3.2-1B"
+tokenizer_path = "${oc.env:DUMP_DIR}/tokenizers/Llama-3.2-chem-1B-v2"
 
 [optimizer]
 name = "AdamW"

@@ -22,7 +22,7 @@ save_aim_folder = "aim"
 name = "llama3"
 flavor = "1B"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
-tokenizer_path = "meta-llama/Llama-3.2-1B"
+tokenizer_path = "${oc.env:DUMP_DIR}/tokenizers/Llama-3.2-chem-1B-v2"
 
 [optimizer]
 name = "AdamW"
@@ -59,7 +59,7 @@ enable_async_tensor_parallel = false
 [checkpoint]
 enable_checkpoint = true
 save_folder = "checkpoints/yerevann/Llama-3-1.3B"
-# load_folder = "checkpoints/yerevann/Llama-3-1.3B/fb0e25fabe8a48759aa77a28"
+# load_folder = "checkpoints/yerevann/Llama-3-1.3B/3023be15c58140c288bc8054"
 # load_at_step = 32000
 interval_type = "steps"
 interval = 4000
