@@ -172,7 +172,7 @@ def sample_dict_to_formatted_string(sample_dict, rng):
     tags = list(tags_dict.keys())
     rng.shuffle(tags)  # shuffle the tags to include
 
-    p_range = 0.5  # probability of property specifying range
+    p_range = 0.0  # probability of property specifying range
     smiles_encountered = False
     formatted_string = ""
     for tag in tags:
