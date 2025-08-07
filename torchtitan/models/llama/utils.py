@@ -156,8 +156,8 @@ def model_args_to_hf_config(model_args):
         "3B": "meta-llama/Llama-3.2-3B",
         "7B": "meta-llama/Llama-3.2-7B",
     }[model_size]
+    llama_config = llama3_configs[model_size]
     if model_size in ["27M", "100M", "170M", "380M", "750M"]:
-        llama_config = llama3_configs[model_size]
         base_config = AutoConfig.from_pretrained(
             base_config_name,
             hidden_size=llama_config.dim,
@@ -166,9 +166,13 @@ def model_args_to_hf_config(model_args):
             num_key_value_heads=llama_config.n_kv_heads,
             head_dim=llama_config.dim // llama_config.n_heads,
             intermediate_size=4 * llama3_configs[model_size].dim,
+            rope_theta=llama_config.rope_theta,
         )
     else:
-        base_config = AutoConfig.from_pretrained(base_config_name)
+        base_config = AutoConfig.from_pretrained(
+            base_config_name,
+            rope_theta=llama_config.rope_theta,
+        )
 
     return base_config
 
