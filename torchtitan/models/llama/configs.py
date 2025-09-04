@@ -25,13 +25,13 @@ llama2_configs = {
 }
 
 llama3_configs = {
-    "debugmodel": ModelArgs(dim=256, n_layers=8, n_heads=16, rope_theta=500000),
+    "debugmodel": ModelArgs(dim=256, n_layers=8, n_heads=16, rope_theta=10000),
     "27M": ModelArgs(
         dim=192,
         n_layers=6,
         n_heads=4,       # 192/4 = 48 per head (comparable in scale to the larger models)
         n_kv_heads=2,    # preserving the 1:2 ratio with n_heads
-        rope_theta=500000,
+        rope_theta=10000,
         share_embeddings=True,
     ),
     "100M": ModelArgs(
@@ -39,7 +39,7 @@ llama3_configs = {
         n_layers=8,
         n_heads=8,       # 512/8 = 64 per head
         n_kv_heads=4,    # keeping the 1:2 ratio relative to n_heads
-        rope_theta=500000,
+        rope_theta=10000,
         share_embeddings=True,
     ),
     "170M": ModelArgs(
@@ -47,7 +47,7 @@ llama3_configs = {
         n_layers=8,
         n_heads=16,
         n_kv_heads=8,
-        rope_theta=500000,
+        rope_theta=10000,
         share_embeddings=True,
     ),
     "380M": ModelArgs(
@@ -55,7 +55,7 @@ llama3_configs = {
         n_layers=16,
         n_heads=16,
         n_kv_heads=8,
-        rope_theta=500000,
+        rope_theta=10000,
         share_embeddings=True,
     ),
     "750M": ModelArgs(
@@ -63,7 +63,7 @@ llama3_configs = {
         n_layers=16,
         n_heads=24,
         n_kv_heads=8,
-        rope_theta=500000,
+        rope_theta=10000,
         share_embeddings=True,
     ),
     "1B": ModelArgs(
@@ -71,7 +71,7 @@ llama3_configs = {
         n_layers=16,
         n_heads=32,
         n_kv_heads=8,
-        rope_theta=500000,
+        rope_theta=10000,
         share_embeddings=True,
     ),
     "3B": ModelArgs(
@@ -79,7 +79,7 @@ llama3_configs = {
         n_layers=28,
         n_heads=24,
         n_kv_heads=8,
-        rope_theta=500000,
+        rope_theta=10000,
         ffn_dim_multiplier=2 / 3,  # in Llama3.2-3B dim is 3072, but ffn dim is 8192
         share_embeddings=True,
     ),

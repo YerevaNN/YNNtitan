@@ -166,6 +166,7 @@ def model_args_to_hf_config(model_args):
             num_key_value_heads=llama_config.n_kv_heads,
             head_dim=llama_config.dim // llama_config.n_heads,
             intermediate_size=4 * llama3_configs[model_size].dim,
+            rope_theta=llama_config.rope_theta,
         )
     else:
         base_config = AutoConfig.from_pretrained(base_config_name)
@@ -221,7 +222,7 @@ def export_llama3_weights(
         hf_model=hf_model,
         tokenizer=tokenizer,
         atol=1e-1,
-        prompts=["", "[QED]", "[SAFE]"],
+        prompts=["", "[QED]", "[SAFE]", "[SMILES]", "O=C(Nc1ccc(Cl)"],
     )
     hf_model.save_pretrained(save_dir)
     logger.info(
