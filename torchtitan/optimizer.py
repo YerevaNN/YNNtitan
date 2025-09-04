@@ -145,6 +145,8 @@ def warmup_stable_decay_simplified(
         # make sure the decay_steps_perc does not include the warmup_steps
         decay_steps_perc = min(decay_steps_perc, 1 - warmup_steps / decay_at_step)
 
+    #change decay method to equal steps per decay
+    # decay_steps = int(per_decay_num_steps * decay_steps_perc)
     decay_steps = int(decay_at_step * decay_steps_perc)
     # the step at which to start the decay
     start_decay_step = decay_at_step - decay_steps
