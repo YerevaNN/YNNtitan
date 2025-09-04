@@ -2,7 +2,7 @@
 # All rights reserved
 from torchtitan.logging import logger
 from functools import cache
-import safe
+# import safe
 
 import os
 try:
@@ -47,7 +47,7 @@ def convert_representation(smiles, representation_type):
     try:
         return {
             "SMILES": lambda x: x,
-            "SAFE": safe.encode
+            # "SAFE": safe.encode
         }[representation_type](smiles)
     except Exception as e:
         # logger.info(f"{e}. Could not encode molecule {smiles} with representation {representation_type}")
