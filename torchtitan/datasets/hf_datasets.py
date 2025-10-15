@@ -38,11 +38,8 @@ _supported_datasets = {
     "c4": "allenai/c4",
     "chemlactica_train_mini": "test/assets/chemlactica_train_mini",
     "chemlactica_train": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form/train_rdkit_computed_rel+form",
-    # "conformers_train": "/auto/home/menuab/DRUGS/train",
-    # "conformers_valid": "/auto/home/menuab/DRUGS/valid",
     "conformers_train": "/nfs/h100/raid/chem/geom_isomeric_processed/DRUGS/train",
     "conformers_valid": "/nfs/h100/raid/chem/geom_isomeric_processed/DRUGS/valid",
-    # valid
     "chemlactica_valid": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form",
     "chemlactica_valid_mini": "test/assets/chemlactica_valid_mini",
 }
