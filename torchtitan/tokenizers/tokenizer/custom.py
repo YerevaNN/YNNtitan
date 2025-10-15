@@ -25,7 +25,28 @@ class CustomTokenizer:
     def __init__(self, tokenizer_path: str):
 
         # Load a tokenizer
-        self.model = AutoTokenizer.from_pretrained(tokenizer_path)
+        try:
+            # Prefer fast tokenizer and allow custom implementations
+            self.model = AutoTokenizer.from_pretrained(
+                tokenizer_path,
+                use_fast=True,
+                trust_remote_code=True,
+            )
+        except Exception as e:
+            # Provide a clearer error for local directories missing tokenizer assets
+            if os.path.isdir(tokenizer_path):
+                has_tokenizer_json = os.path.exists(os.path.join(tokenizer_path, "tokenizer.json"))
+                has_vocab_json = os.path.exists(os.path.join(tokenizer_path, "vocab.json"))
+                has_spm = os.path.exists(os.path.join(tokenizer_path, "spiece.model"))
+                if not (has_tokenizer_json or has_vocab_json or has_spm):
+                    raise FileNotFoundError(
+                        f"Tokenizer assets not found in '{tokenizer_path}'. Expected one of: "
+                        f"'tokenizer.json' (fast), 'vocab.json' (BPE), or 'spiece.model' (SentencePiece). "
+                        f"Please set model.tokenizer_path to a valid tokenizer directory for Qwen3 (e.g., the HF tokenizer folder), "
+                        f"or download the tokenizer and point to that path."
+                    ) from e
+            # Re-raise original error if files exist but another issue occurred
+            raise
         # the padding is done for efficiency reasons,
         # when the token embedding size if a nice number (ege is divisible by to many times), the code runs more efficiently
         self.pad_to_multiple_of = 8

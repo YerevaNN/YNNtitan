@@ -1,0 +1,80 @@
+# torchtitan Config.toml
+# NOTE: this toml config is a preset for Qwen3 8B training
+
+[job]
+dump_folder = "./outputs"
+description = "Qwen3 8B training"
+use_for_integration_test = false
+
+[profiling]
+enable_profiling = false
+save_traces_folder = "profile_trace"
+profile_freq = 10
+enable_memory_snapshot = false
+save_memory_snapshot_folder = "memory_snapshot"
+
+[metrics]
+log_freq = 10
+enable_color_printing = true
+enable_aim = true
+save_aim_folder = "aim"
+
+[model]
+name = "qwen3"
+flavor = "8B"
+norm_type = "rmsnorm"
+# Local HF tokenizer directory for Qwen3 8B
+# tokenizer_path is used by AutoTokenizer.from_pretrained
+# and should contain tokenizer.json/config.json
+# Example provided below
+# tokenizer_path = "/path/to/Qwen3-8B"
+tokenizer_path = "./torchtitan/datasets/tokenizer/original/tokenizer.model"
+
+[optimizer]
+name = "AdamW"
+lr = 3e-4
+
+[training]
+batch_size = 1
+gradient_accumulation_steps = 8
+seq_len = 4096
+max_norm = 1.0
+warmup_steps = 200
+steps = 1000
+decay_steps_perc = 0.1
+num_decays = 1
+data_parallel_degree = -1
+tensor_parallel_degree = 2
+compile = false
+dataset = "c4"
+
+[validation]
+valid_freq = 500
+enable_valid = false
+dataset = "c4"
+
+[dataloader]
+num_workers = 2
+
+[experimental]
+pipeline_parallel_degree = 1
+enable_async_tensor_parallel = false
+
+[checkpoint]
+enable_checkpoint = false
+save_folder = "checkpoint"
+# To convert HF weights to Titan, uncomment load_folder and run with --model_download_export.to_titan
+# load_folder = "/path/to/Qwen3-8B"
+# load_at_step = 0
+interval_type = "steps"
+interval = 500
+model_weights_only = false
+export_dtype = "float32"
+async_mode = "disabled"
+
+[activation_checkpoint]
+mode = 'selective'
+selective_ac_option = 'op'
+
+[float8]
+enable_float8_linear = false 

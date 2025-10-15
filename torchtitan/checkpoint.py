@@ -10,10 +10,11 @@ import os
 import re
 import shutil
 import time
+import warnings
 from dataclasses import dataclass, field
 from io import BytesIO
 from multiprocessing import get_context
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union, Optional
 
 import torch
 import torch.distributed as dist
@@ -30,6 +31,10 @@ from torch.distributed.checkpoint.stateful import Stateful
 from torch.utils.data import DataLoader
 from torchtitan.config_manager import JobConfig, TORCH_DTYPE_MAP
 from torchtitan.logging import init_logger, logger
+from torch.distributed.fsdp import StateDictType
+from torch.distributed._tensor import DTensor
+from torch.distributed.fsdp._common_utils import FSDP_WRAPPED_MODULE
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 class IntervalType(enum.Enum):
@@ -83,21 +88,144 @@ class TrainState(Stateful):
 
 
 class ModelWrapper(Stateful):
-    def __init__(self, model: Union[nn.Module, List[nn.Module]]) -> None:
+    def __init__(self, model: Union[nn.Module, List[nn.Module]], vocab_size: Optional[int] = None) -> None:
         self.model = [model] if isinstance(model, nn.Module) else model
+        self.target_vocab_size = vocab_size
+        self.original_embedding_weights = {}
 
     def state_dict(self) -> None:
-        return {
-            k: v for sd in map(get_model_state_dict, self.model) for k, v in sd.items()
-        }
+        # Flatten state dicts and drop non-critical, recomputable buffers such as 'freqs_cis'
+        merged = {k: v for sd in map(get_model_state_dict, self.model) for k, v in sd.items()}
+        filtered = {k: v for k, v in merged.items() if not k.endswith("freqs_cis")}
+        return filtered
+
+    def _resize_token_embeddings(self, new_vocab_size: int):
+        """Resize token embeddings to match checkpoint vocabulary size"""
+        for model in self.model:
+            if hasattr(model, 'tok_embeddings'):
+                old_embeddings = model.tok_embeddings
+                old_vocab_size = old_embeddings.weight.size(0)
+                
+                if old_vocab_size != new_vocab_size:
+                    logger.info(f"Resizing token embeddings from {old_vocab_size} to {new_vocab_size}")
+                    
+                    # Save original weights if we're expanding for later restoration
+                    if new_vocab_size > old_vocab_size:
+                        self.original_embedding_weights[id(model)] = old_embeddings.weight.data.clone()
+                    
+                    # Create new embedding layer with the target size
+                    new_embeddings = nn.Embedding(new_vocab_size, old_embeddings.weight.size(1))
+                    new_embeddings.to(old_embeddings.weight.device, dtype=old_embeddings.weight.dtype)
+                    
+                    # Copy existing weights
+                    min_vocab_size = min(old_vocab_size, new_vocab_size)
+                    new_embeddings.weight.data[:min_vocab_size] = old_embeddings.weight.data[:min_vocab_size]
+                    
+                    # Initialize new tokens if expanding
+                    if new_vocab_size > old_vocab_size:
+                        # Initialize new token embeddings with Qwen3 embedding init
+                        # Match Qwen3Transformer.init_weights embed_std
+                        embed_std = 0.006
+                        nn.init.trunc_normal_(
+                            new_embeddings.weight.data[old_vocab_size:],
+                            mean=0.0,
+                            std=embed_std,
+                        )
+                    
+                    # Replace the embedding layer
+                    model.tok_embeddings = new_embeddings
+                    model.vocab_size = new_vocab_size
+                    if hasattr(model.model_args, 'vocab_size'):
+                        model.model_args.vocab_size = new_vocab_size
+
+                    # If model has a separate output head, resize it as well
+                    if hasattr(model, 'output') and isinstance(model.output, nn.Linear) and model.output is not None:
+                        old_output = model.output
+                        old_out_vocab = old_output.weight.size(0)
+                        if old_out_vocab != new_vocab_size:
+                            logger.info(f"Resizing output head from {old_out_vocab} to {new_vocab_size}")
+                            # Create new output with same input dim and no bias
+                            new_output = nn.Linear(old_output.in_features, new_vocab_size, bias=False)
+                            new_output.to(old_output.weight.device, dtype=old_output.weight.dtype)
+                            # Copy overlapping rows
+                            min_out = min(old_out_vocab, new_vocab_size)
+                            new_output.weight.data[:min_out] = old_output.weight.data[:min_out]
+                            # Initialize any new rows to match Qwen3 final layer init
+                            if new_vocab_size > old_out_vocab:
+                                final_out_std = (model.model_args.dim ** -0.5) if hasattr(model, 'model_args') and hasattr(model.model_args, 'dim') else 0.02
+                                cutoff_factor = 3
+                                # Use trunc_normal_ limited to +/- 3 std like model init
+                                nn.init.trunc_normal_(
+                                    new_output.weight.data[old_out_vocab:],
+                                    mean=0.0,
+                                    std=final_out_std,
+                                    a=-cutoff_factor * final_out_std,
+                                    b=cutoff_factor * final_out_std,
+                                )
+                            # Replace output head
+                            model.output = new_output
+
+    def _get_vocab_size_from_checkpoint_info(self, checkpoint_path: str) -> Optional[int]:
+        """Try to extract vocabulary size from checkpoint metadata"""
+        try:
+            metadata_path = os.path.join(checkpoint_path, ".metadata")
+            if os.path.exists(metadata_path):
+                # Try to load metadata to get shape info if available
+                # This is a simple heuristic - in practice you might need to check actual tensor files
+                pass
+        except:
+            pass
+        return None
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        func = functools.partial(
-            set_model_state_dict,
-            model_state_dict=state_dict,
-            options=StateDictOptions(strict=False),
-        )
-        list(map(func, self.model))
+        # Check for vocabulary size mismatch in token embeddings
+        vocab_mismatch_detected = False
+        checkpoint_vocab_size = None
+        
+        for key, value in state_dict.items():
+            if 'tok_embeddings.weight' in key:
+                checkpoint_vocab_size = value.shape[0]
+                # Check if current model has different vocab size
+                for model in self.model:
+                    if hasattr(model, 'tok_embeddings'):
+                        current_vocab_size = model.tok_embeddings.weight.size(0)
+                        if current_vocab_size != checkpoint_vocab_size:
+                            vocab_mismatch_detected = True
+                            logger.info(f"Detected vocabulary size mismatch: checkpoint={checkpoint_vocab_size}, current={current_vocab_size}")
+                            break
+                break
+        
+        if vocab_mismatch_detected and checkpoint_vocab_size:
+            # Temporarily resize to match checkpoint
+            logger.info(f"Temporarily resizing embeddings to match checkpoint size: {checkpoint_vocab_size}")
+            for model in self.model:
+                if hasattr(model, 'tok_embeddings'):
+                    current_vocab_size = model.tok_embeddings.weight.size(0)
+                    if current_vocab_size != checkpoint_vocab_size:
+                        self._resize_token_embeddings(checkpoint_vocab_size)
+            
+            # Load the state dict
+            func = functools.partial(
+                set_model_state_dict,
+                model_state_dict=state_dict,
+                options=StateDictOptions(strict=False),
+            )
+            list(map(func, self.model))
+            
+            # Resize back to target vocabulary size if needed
+            if self.target_vocab_size and self.target_vocab_size != checkpoint_vocab_size:
+                logger.info(f"Resizing embeddings back to target size: {self.target_vocab_size}")
+                for model in self.model:
+                    if hasattr(model, 'tok_embeddings'):
+                        self._resize_token_embeddings(self.target_vocab_size)
+        else:
+            # Normal loading without vocabulary mismatch
+            func = functools.partial(
+                set_model_state_dict,
+                model_state_dict=state_dict,
+                options=StateDictOptions(strict=False),
+            )
+            list(map(func, self.model))
 
 
 class OptimizerWrapper(Stateful):
@@ -221,9 +349,19 @@ class CheckpointManager:
 
         self.states = states
 
+        # Extract target vocabulary size from model if available
+        target_vocab_size = None
+        for model in model_parts:
+            if hasattr(model, 'vocab_size'):
+                target_vocab_size = model.vocab_size
+                break
+            elif hasattr(model, 'model_args') and hasattr(model.model_args, 'vocab_size'):
+                target_vocab_size = model.model_args.vocab_size
+                break
+
         self.states.update(
             {
-                "model": ModelWrapper(model_parts),
+                "model": ModelWrapper(model_parts, vocab_size=target_vocab_size),
                 "optimizer": OptimizerWrapper(model_parts, optimizers),
                 "dataloader": dataloader,
             }

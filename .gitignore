@@ -11,7 +11,7 @@ dist/*
 data
 out
 wandb
-aim
+.aim/
 
 torchtitan/datasets/**/*.model
 
@@ -19,3 +19,7 @@ torchtitan/datasets/**/*.model
 *.log
 error.json
 _remote_module_non_scriptable.py
+
+
+logs/
+count_tokens.py

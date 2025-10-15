@@ -109,6 +109,11 @@ def validate(
         )
         time_last_log = time.perf_counter()
 
+    # Handle case where no validation steps were executed
+    if eval_state.step == 0 or total_eval_time == 0:
+        logger.warning("No validation steps were executed or total_eval_time is zero. Skipping validation metrics.")
+        return
+        
     avg_time_end_to_end = total_eval_time / eval_state.step
     gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
 

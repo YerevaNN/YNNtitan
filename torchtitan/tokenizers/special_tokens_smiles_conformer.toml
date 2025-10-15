@@ -1,0 +1,7 @@
+[SMILES]
+start = "[SMILES]"
+end = "[/SMILES]"
+
+[CONFORMER]
+start = "[CONFORMER]"
+end = "[/CONFORMER]" 

@@ -1,0 +1,81 @@
+# torchtitan Config.toml
+
+[job]
+dump_folder = "/nfs/h100/raid/chem/checkpoints"
+description = "Qwen3 0.6B training"
+use_for_integration_test = false
+
+[profiling]
+enable_profiling = false
+save_traces_folder = "profile_trace"
+profile_freq = 10
+enable_memory_snapshot = false
+save_memory_snapshot_folder = "memory_snapshot"
+
+[metrics]
+log_freq = 1
+enable_color_printing = true
+enable_aim = true
+save_aim_folder = "aim"
+
+[model]
+name = "qwen3"
+flavor = "0.6B"
+norm_type = "rmsnorm"
+# Local HF tokenizer directory for Qwen3 0.6B
+# tokenizer_path is used by AutoTokenizer.from_pretrained
+# and should contain tokenizer.json/config.json
+# Example provided below
+# tokenizer_path = "/auto/home/vover/models/saved_models/Qwen3-0.6B"
+tokenizer_path = "/auto/home/vover/models/saved_models/qwen3-0.6b"
+
+[optimizer]
+name = "AdamW"
+lr = 4e-4
+
+[training]
+batch_size = 16
+gradient_accumulation_steps = 8
+seq_len = 2048
+max_norm = 1.0
+warmup_steps = 500
+steps = 20000
+decay_steps_perc = 0.1
+num_decays = 1
+data_parallel_degree = -1
+tensor_parallel_degree = 1
+compile = true
+dataset = "chemlactica_train"
+data_processing_style = "chemlactica_style"
+representation_type = "SMILES"
+
+[validation]
+valid_freq = 2000
+enable_valid = true
+dataset = "chemlactica_valid"
+
+[dataloader]
+num_workers = 2
+
+[experimental]
+pipeline_parallel_degree = 1
+enable_async_tensor_parallel = false
+
+[checkpoint]
+enable_checkpoint = true
+save_folder = "yerevann/Qwen3-0.6B"
+# To convert HF weights to Titan, uncomment load_folder and run with --model_download_export.to_titan
+# load_folder = "/auto/home/vover/models/saved_models/qwen3-0.6b"
+# load_at_step = 0
+interval_type = "steps"
+interval = 2000
+model_weights_only = false
+export_dtype = "float32"
+async_mode = "async_with_pinned_mem"
+
+[activation_checkpoint]
+mode = 'none'
+selective_ac_option = '2'
+
+[float8]
+enable_float8_linear = false 

@@ -11,17 +11,19 @@ from torchtitan.parallelisms.pipeline_llama import pipeline_llama
 
 
 __all__ = [
-    "models_parallelize_fns",
-    "models_pipelining_fns",
-    "ParallelDims",
+	"models_parallelize_fns",
+	"models_pipelining_fns",
+	"ParallelDims",
 ]
 
 models_parallelize_fns = {
-    "llama2": parallelize_llama,
-    "llama3": parallelize_llama,
-    'opt': parallelize_llama,
+	"llama2": parallelize_llama,
+	"llama3": parallelize_llama,
+	'opt': parallelize_llama,
+	"qwen3": parallelize_llama,
 }
 models_pipelining_fns = {
-    "llama2": pipeline_llama,
-    "llama3": pipeline_llama
+	"llama2": pipeline_llama,
+	"llama3": pipeline_llama,
+	"qwen3": pipeline_llama,
 }

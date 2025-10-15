@@ -1,0 +1,74 @@
+[job]
+dump_folder = "./outputs"
+description = "Qwen3 0.6B mini run"
+use_for_integration_test = false
+
+[profiling]
+enable_profiling = false
+save_traces_folder = "profile_trace"
+profile_freq = 10
+enable_memory_snapshot = false
+save_memory_snapshot_folder = "memory_snapshot"
+
+[metrics]
+log_freq = 1
+enable_color_printing = true
+enable_aim = false
+save_aim_folder = "aim"
+
+[model]
+name = "qwen3"
+flavor = "0.6B"
+norm_type = "rmsnorm"
+# Local HF tokenizer directory (AutoTokenizer)
+# make sure this directory contains tokenizer.json etc.
+tokenizer_path = "/auto/home/vover/models/saved_models/qwen3-0.6b/tokenizer"
+
+[optimizer]
+name = "AdamW"
+lr = 3e-4
+
+[training]
+batch_size = 1
+gradient_accumulation_steps = 1
+seq_len = 64
+max_norm = 1.0
+warmup_steps = 0
+steps = 2
+decay_steps_perc = 0.1
+num_decays = 1
+data_parallel_degree = -1
+tensor_parallel_degree = 1
+compile = false
+# tiny local dataset for a quick run
+dataset = "chemlactica_train_mini"
+data_processing_style = "chemlactica_style"
+representation_type = "SMILES"
+
+[validation]
+valid_freq = 100
+enable_valid = false
+
+[dataloader]
+num_workers = 0
+pin_memory = false
+
+[experimental]
+pipeline_parallel_degree = 1
+enable_async_tensor_parallel = false
+
+[checkpoint]
+enable_checkpoint = false
+save_folder = "checkpoint"
+interval_type = "steps"
+interval = 100
+model_weights_only = false
+export_dtype = "float32"
+async_mode = "disabled"
+
+[activation_checkpoint]
+mode = 'none'
+selective_ac_option = 'op'
+
+[float8]
+enable_float8_linear = false 

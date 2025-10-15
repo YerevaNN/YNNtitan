@@ -40,8 +40,8 @@ _supported_datasets = {
     "chemlactica_train": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form/train_rdkit_computed_rel+form",
     # "conformers_train": "/auto/home/menuab/DRUGS/train",
     # "conformers_valid": "/auto/home/menuab/DRUGS/valid",
-    "conformers_train": "/auto/home/menuab/DRGUS_iso_agnostic/DRUGS/train",
-    "conformers_valid": "/auto/home/menuab/DRGUS_iso_agnostic/DRUGS/valid",
+    "conformers_train": "/nfs/h100/raid/chem/geom_isomeric_processed/DRUGS/train",
+    "conformers_valid": "/nfs/h100/raid/chem/geom_isomeric_processed/DRUGS/valid",
     # valid
     "chemlactica_valid": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form",
     "chemlactica_valid_mini": "test/assets/chemlactica_valid_mini",
@@ -193,7 +193,21 @@ class HuggingFaceDataset(IterableDataset, Stateful):
                     self._sample_idx += 1
 
                     while len(self._all_tokens) >= max_buffer_token_len:
-                        x = torch.LongTensor(self._all_tokens[:max_buffer_token_len])
+                        slice_data = self._all_tokens[:max_buffer_token_len]
+                        # Filter out None values that might come from tokenization
+                        slice_data = [token for token in slice_data if token is not None]
+                        if len(slice_data) == 0:
+                            # If all tokens were None, skip this iteration
+                            self._all_tokens = self._all_tokens[max_buffer_token_len:]
+                            continue
+                        # Ensure consistent tensor size by padding/truncating
+                        if len(slice_data) < max_buffer_token_len:
+                            # Pad with zeros if needed
+                            slice_data.extend([0] * (max_buffer_token_len - len(slice_data)))
+                        elif len(slice_data) > max_buffer_token_len:
+                            # Truncate if needed
+                            slice_data = slice_data[:max_buffer_token_len]
+                        x = torch.LongTensor(slice_data)
                         # update tokens to the remaining tokens
                         self._all_tokens = self._all_tokens[max_buffer_token_len:]
                         input = x[:-1]

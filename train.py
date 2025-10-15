@@ -31,6 +31,7 @@ from torchtitan.tokenizers.tokenizer import build_tokenizer
 
 from torchtitan.utils import common_utils as utils
 from torchtitan.validation import validate
+from torchtitan.models.qwen3 import build_qwen3_model_args_from_pretrained
 
 
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
@@ -70,7 +71,12 @@ def main(job_config: JobConfig):
 
     model_name = job_config.model.name
     world_mesh = parallel_dims.build_mesh(device_type="cuda")
-    init_device = "cpu" if job_config.checkpoint.create_seed_checkpoint else "cuda"
+    init_device = (
+        "cpu"
+        if job_config.checkpoint.create_seed_checkpoint
+        or job_config.model_download_export.to_titan
+        else "cuda"
+    )
 
     # build tokenizer
     tokenizer_type = model_name_to_tokenizer[model_name]
@@ -125,6 +131,15 @@ def main(job_config: JobConfig):
     model_config.norm_type = job_config.model.norm_type
     model_config.vocab_size = tokenizer.padded_n_words
     model_config.max_seq_len = job_config.training.seq_len
+    # Ensure Qwen3 preset matches HF shapes for converted checkpoints
+    if model_name == "qwen3" and job_config.model.flavor == "0.6B":
+        # Qwen3-0.6B uses head_dim=128 and rope_theta=1e6
+        try:
+            model_config.head_dim = 128
+            model_config.rope_theta = 1_000_000.0
+            model_config.ffn_dim_multiplier = 0.75
+        except Exception:
+            pass
 
     logger.info(f"Building {model_name} {job_config.model.flavor} with {model_config}")
     with torch.device("meta"):
@@ -140,7 +155,7 @@ def main(job_config: JobConfig):
             model,
             weights_path=job_config.checkpoint.load_folder,
             tokenizer=tokenizer.model,
-            source=job_config.model_download_export.weights_source,
+            source=job_config.model_download_export.weight_source,
             token_embedding_size=model_config.vocab_size,
         )
 
