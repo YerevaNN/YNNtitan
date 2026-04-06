@@ -178,10 +178,14 @@ def model_args_to_hf_config(model_args):
 
 
 def export_llama3_weights(
-    model: Transformer, save_dir, tokenizer, token_embedding_size: int
+    model: Transformer,
+    save_dir,
+    tokenizer,
+    token_embedding_size: int,
+    verify: bool = True,
 ):
     """
-    write docs
+    Map torchtitan Llama3 weights to HuggingFace `AutoModelForCausalLM` and save via `save_pretrained`.
     """
 
     model_config = model_args_to_hf_config(model.model_args)
@@ -222,7 +226,8 @@ def export_llama3_weights(
         corrected_state_dict["lm_head.weight"] = state_dict["tok_embeddings.weight"]
 
     hf_model.load_state_dict(corrected_state_dict)
-    verify_logits_matching(model=model, hf_model=hf_model, tokenizer=tokenizer, atol=12)
+    if verify:
+        verify_logits_matching(model=model, hf_model=hf_model, tokenizer=tokenizer, atol=12)
     hf_model.save_pretrained(save_dir)
     logger.info(
         f"Successfully exported Llama 3 model to huggingface model at {save_dir}."

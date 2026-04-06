@@ -41,16 +41,17 @@ _supported_datasets = {
     "c4_test": "test/assets/c4_test",
     "c4": "allenai/c4",
     "chemlactica_train_mini": "test/assets/chemlactica_train_mini",
-    "chemlactica_train": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form/train_rdkit_computed_rel+form",
+    "chemlactica_train": "/mnt/weka/gsimonyan/data/rdkit_computed_rel+form/train_rdkit_computed_rel+form",
     "conformers_train": "/auto/home/menuab/code/3DMolGen/data/pcqm/train",
     "conformers_valid": "/auto/home/menuab/code/3DMolGen/data/pcqm/valid",
     # valid
-    "chemlactica_valid": "/nfs/dgx/raid/chem/data/rdkit_computed_rel+form",
+    "chemlactica_valid": "/mnt/weka/gsimonyan/data/rdkit_computed_rel+form",
     "chemlactica_valid_mini": "test/assets/chemlactica_valid_mini",
-    # pubchem dataset
-    "pubchem_train": f"{os.environ['PUBCHEM_DATA_DIR']}/train_rdkit_computed_rel+form",
-    "pubchem_valid": f"{os.environ['PUBCHEM_DATA_DIR']}",
 }
+_pubchem_dir = os.environ.get("PUBCHEM_DATA_DIR")
+if _pubchem_dir:
+    _supported_datasets["pubchem_train"] = f"{_pubchem_dir}/train_rdkit_computed_rel+form"
+    _supported_datasets["pubchem_valid"] = _pubchem_dir
 
 _supported_data_processing_styles = {
     "chemlactica_style": chemlactica_style_data_processing,

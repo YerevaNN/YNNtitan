@@ -5,20 +5,24 @@
 # LICENSE file in the root directory of this source tree.
 
 import submitit
+import os
 
 
 if __name__ == "__main__":
-    executor = submitit.AutoExecutor(folder="~/slurm_jobs/titan/job_%j")
+    executor = submitit.AutoExecutor(folder=f"{os.environ['LOG_DIR']}/slurm_logs/titan/job_%j")
     n_gpus = 6
-    node = "h100"
+    node = "all"
     executor.update_parameters(
         name="titan",
-        timeout_min=24 * 24 * 60,
+        timeout_min=2 * 24 * 60,
         gpus_per_node=n_gpus,
         nodes=1,
         mem_gb=200,
         cpus_per_task=184,
         slurm_additional_parameters={"partition": node},
+        # Compute nodes often lack srun on PATH for non-login batch scripts; single-node
+        # jobs do not need an srun step—Slurm already placed the allocation.
+        use_srun=False,
     )
 
     jobs = []
@@ -26,8 +30,8 @@ if __name__ == "__main__":
         for _ in range(1):
             # train_config = './train_configs/chemlactica_125m.toml'
             # train_config = './train_configs/chemlactica_1.3b.toml'
-            # train_config = "./train_configs/llama3_170m.toml"
-            train_config = "./train_configs/llama3_380m.toml"
+            train_config = "./train_configs/llama3_170m.toml"
+            #train_config = "./train_configs/llama3_380m.toml"
             # train_config = "./train_configs/llama3_750m.toml"
             # train_config = "./train_configs/llama3_1b_pubchem.toml"
             # train_config = "./train_configs/llama3_380m_pubchem.toml"

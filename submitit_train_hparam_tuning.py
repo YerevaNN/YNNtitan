@@ -19,6 +19,7 @@ if __name__ == "__main__":
         mem_gb=80,
         cpus_per_task=n_gpus * 12,
         slurm_additional_parameters={"partition": node},
+        use_srun=False,
     )
 
     hparams = {

@@ -1,0 +1,116 @@
+#!/bin/bash
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+#
+# Single-node training — equivalent to submitit_train.py (no submitit, no srun).
+# Submit from the repo root, after loading the same Python/torch env you use on the login node:
+#   mkdir -p slurm_logs
+#   sbatch train_single_node.slurm
+#
+# Override config or GPU count at submit time:
+#   TRAIN_CONFIG=./train_configs/llama3_380m.toml N_GPUS=8 sbatch train_single_node.slurm
+#
+# On the login node, install deps into ynntitan with that env's Python (bare `pip` may hit base 3.13):
+#   conda activate ynntitan && python -m pip install -e .
+
+#SBATCH --job-name=titan
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --gpus-per-node=6
+#SBATCH --cpus-per-task=184
+#SBATCH --mem=200G
+#SBATCH --partition=all
+#SBATCH --time=48:00:00
+#SBATCH --output=/mnt/weka/gsimonyan/results/slurm_logs/titan/job_%j/%j.out
+#SBATCH --error=/mnt/weka/gsimonyan/results/slurm_logs/titan/job_%j/%j.err
+
+# If your site uses gres instead of gpus-per-node, comment the line above and use:
+# #SBATCH --gres=gpu:6
+
+# No `set -u`: /etc/profile.d/*.sh (e.g. byobu) often uses unset vars as empty; nounset breaks those.
+set -eo pipefail
+
+REPO_ROOT="${SLURM_SUBMIT_DIR:-/home/gsimonyan/YNNtitan}"
+cd "${REPO_ROOT}"
+echo "titan_slurm job=${SLURM_JOB_ID:-local} host=$(hostname) repo=${REPO_ROOT}"
+
+mkdir -p /mnt/weka/gsimonyan/checkpoints /mnt/weka/gsimonyan/results/slurm_logs/titan
+
+if [[ -f .env_vars ]]; then
+    # shellcheck source=/dev/null
+    source .env_vars
+fi
+
+# Activate ynntitan before any global profile/bashrc so PATH/PYTHONPATH stay aligned with conda.
+# (Sourcing ~/.bashrc first often reorders PATH or skips conda in non-interactive jobs.)
+CONDA_ROOT="${CONDA_ROOT:-/mnt/weka/shared-cache/miniforge3}"
+CONDA_ENV_NAME="${CONDA_ENV_NAME:-ynntitan}"
+# shellcheck source=/dev/null
+source "${CONDA_ROOT}/etc/profile.d/conda.sh"
+conda activate "${CONDA_ENV_NAME}"
+
+if [[ -z "${CONDA_PREFIX:-}" ]]; then
+    echo "ERROR: conda activate failed (CONDA_PREFIX empty)." >&2
+    exit 1
+fi
+
+PYTHON="${CONDA_PREFIX}/bin/python"
+if [[ ! -x "${PYTHON}" ]]; then
+    echo "ERROR: missing interpreter: ${PYTHON}" >&2
+    exit 1
+fi
+
+# Inherited from the submission shell, these often break conda (wrong site-packages order).
+unset PYTHONHOME
+unset PYTHONPATH
+
+# Optional: CUDA / MPI modules after conda (uncomment if your site requires it).
+# if [[ -f /etc/profile ]]; then
+#     set +e
+#     source /etc/profile
+#     set -e
+# fi
+
+PURELIB=$("${PYTHON}" -c "import sysconfig; print(sysconfig.get_path('purelib'))")
+if [[ ! -d "${PURELIB}/torch" ]]; then
+    echo "ERROR: no ${PURELIB}/torch on this host — PyTorch is not installed in env ${CONDA_ENV_NAME} here (NFS / wrong node / different env than on login)." >&2
+    ls -la "${PURELIB}" 2>/dev/null | head -25 >&2 || true
+    exit 1
+fi
+
+# Pip may inherit PIP_CACHE_DIR=/opt/shared-cache/pip (not writable); use a user cache.
+if [[ -z "${PIP_CACHE_DIR:-}" ]] || [[ ! -w "${PIP_CACHE_DIR}" ]]; then
+    export PIP_CACHE_DIR="${HOME}/.cache/pip"
+fi
+mkdir -p "${PIP_CACHE_DIR}"
+
+# Some clusters have root-only /tmp for wheel builds; prefer a user tmp when needed.
+if [[ ! -w /tmp ]]; then
+    export TMPDIR="${HOME}/.cache/tmp"
+    mkdir -p "${TMPDIR}"
+fi
+
+# Editable install picks up repo changes (use env python so we never call base conda's pip).
+"${PYTHON}" -m pip install -q -e "${REPO_ROOT}/"
+
+if ! "${PYTHON}" -c "import torch" 2>/dev/null; then
+    echo "ERROR: import torch failed for ${PYTHON} despite ${PURELIB}/torch existing." >&2
+    "${PYTHON}" -c "import sys, site; print('executable:', sys.executable); print('purelib:', __import__('sysconfig').get_path('purelib')); print('site:', site.getsitepackages())" || true
+    exit 1
+fi
+
+N_GPUS="${N_GPUS:-6}"
+TRAIN_CONFIG="${TRAIN_CONFIG:-./train_configs/llama3_170m.toml}"
+
+exec "${PYTHON}" -u -m torch.distributed.run \
+    --nproc_per_node="${N_GPUS}" \
+    --rdzv_backend=c10d \
+    --rdzv_endpoint=localhost:0 \
+    --local-ranks-filter=0 \
+    --role=rank \
+    --tee=3 \
+    train.py \
+    --job.config_file "${TRAIN_CONFIG}"

@@ -12,11 +12,20 @@ keywords = ["pytorch", "training", "llm"]
 dependencies = [
     # Hugging Face integrations
     "datasets>=2.19.0",
+    "transformers>=4.38.0",
 
     # Tokenization
     "blobfile",
     "sentencepiece",
     "tiktoken",
+
+    # Config
+    "omegaconf>=2.3.0",
+
+    # Metrics (aim needs pkg_resources from setuptools at runtime)
+    "aim>=3.19.0",
+    # Pin <82: aim uses pkg_resources; setuptools 82+ can ship incomplete trees on some installs.
+    "setuptools>=65,<82",
 
     # Miscellaneous
     "tomli>=1.1.0"
@@ -33,7 +42,6 @@ dev = [
     "pre-commit",
     "pytest",
     "pytest-cov",
-    "aim",
 ]
 
 [tool.setuptools.dynamic]
