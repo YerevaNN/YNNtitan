@@ -91,6 +91,7 @@ def main(job_config: JobConfig):
         pin_memory=job_config.dataloader.pin_memory,
         num_workers=job_config.dataloader.num_workers,
         special_mode=job_config.dataloader.special_mode,
+        print_first_samples=getattr(job_config.dataloader, "print_first_samples", 0),
     )
 
     if not job_config.validation.batch_size:
@@ -113,6 +114,7 @@ def main(job_config: JobConfig):
             pin_memory=job_config.dataloader.pin_memory,
             num_workers=job_config.dataloader.num_workers,
             special_mode=job_config.dataloader.special_mode,
+            print_first_samples=0,
         )
 
     # build model (using meta init)
@@ -285,9 +287,48 @@ def main(job_config: JobConfig):
             logger.debug("step")
 
             loss = 0
-            for _ in range(job_config.training.gradient_accumulation_steps):
+            for accum_idx in range(job_config.training.gradient_accumulation_steps):
                 batch = next(data_iterator, None)
                 input_ids, labels = batch
+
+                preview = getattr(
+                    job_config.dataloader, "log_first_model_batch_preview", 0
+                )
+                if (
+                    preview > 0
+                    and train_state.step == 1
+                    and accum_idx == 0
+                    and dp_rank == 0
+                ):
+                    i_cpu = input_ids.detach().cpu()
+                    l_cpu = labels.detach().cpu()
+                    n = min(preview, i_cpu.size(1))
+                    shift_ok = bool((i_cpu[0, 1:] == l_cpu[0, :-1]).all().item())
+                    dec_tokens = min(256, i_cpu.size(1))
+                    dec = tokenizer.decode(i_cpu[0, :dec_tokens].long().tolist())
+                    if len(dec) > 500:
+                        dec = dec[:500] + "…"
+                    logger.info(
+                        "First model batch (opt-in dataloader.log_first_model_batch_preview=%s): "
+                        "input_ids %s, labels %s, shift_ok=%s",
+                        preview,
+                        tuple(i_cpu.shape),
+                        tuple(l_cpu.shape),
+                        shift_ok,
+                    )
+                    logger.info(
+                        "  first row input_ids[0, :%s]: %s",
+                        n,
+                        i_cpu[0, :n].long().tolist(),
+                    )
+                    logger.info(
+                        "  first row   labels[0, :%s]: %s",
+                        n,
+                        l_cpu[0, :n].long().tolist(),
+                    )
+                    logger.info(
+                        "  decode(input_ids[0, :%s]) (len capped): %s", dec_tokens, dec
+                    )
 
                 ntokens_since_last_log += labels.numel()
                 input_ids = input_ids.cuda()

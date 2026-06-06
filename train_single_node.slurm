@@ -5,13 +5,14 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 #
-# Single-node training — equivalent to submitit_train.py (no submitit, no srun).
-# Submit from the repo root, after loading the same Python/torch env you use on the login node:
-#   mkdir -p slurm_logs
+# Single-node training (full node, default 8 GPUs).
+# Submit from the repo root:
 #   sbatch train_single_node.slurm
 #
 # Override config or GPU count at submit time:
 #   TRAIN_CONFIG=./train_configs/llama3_380m.toml N_GPUS=8 sbatch train_single_node.slurm
+# Resume from step-18000:
+#   TRAIN_CONFIG=./train_configs/llama3_380m_resume.toml N_GPUS=8 sbatch train_single_node.slurm
 #
 # On the login node, install deps into ynntitan with that env's Python (bare `pip` may hit base 3.13):
 #   conda activate ynntitan && python -m pip install -e .
@@ -19,16 +20,16 @@
 #SBATCH --job-name=titan
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gpus-per-node=6
+#SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=184
 #SBATCH --mem=200G
-#SBATCH --partition=all
-#SBATCH --time=48:00:00
+#SBATCH --partition=research
+#SBATCH --time=12:00:00
 #SBATCH --output=/mnt/weka/gsimonyan/results/slurm_logs/titan/job_%j/%j.out
 #SBATCH --error=/mnt/weka/gsimonyan/results/slurm_logs/titan/job_%j/%j.err
 
 # If your site uses gres instead of gpus-per-node, comment the line above and use:
-# #SBATCH --gres=gpu:6
+# #SBATCH --gres=gpu:8
 
 # No `set -u`: /etc/profile.d/*.sh (e.g. byobu) often uses unset vars as empty; nounset breaks those.
 set -eo pipefail
@@ -102,8 +103,15 @@ if ! "${PYTHON}" -c "import torch" 2>/dev/null; then
     exit 1
 fi
 
-N_GPUS="${N_GPUS:-6}"
-TRAIN_CONFIG="${TRAIN_CONFIG:-./train_configs/llama3_170m.toml}"
+N_GPUS="${N_GPUS:-8}"
+TRAIN_CONFIG="${TRAIN_CONFIG:-./train_configs/llama3_380m.toml}"
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+
+TRAIN_ARGS=(--job.config_file "${TRAIN_CONFIG}")
+if [[ -n "${EXTRA_TRAIN_ARGS:-}" ]]; then
+    # shellcheck disable=SC2206
+    TRAIN_ARGS+=(${EXTRA_TRAIN_ARGS})
+fi
 
 exec "${PYTHON}" -u -m torch.distributed.run \
     --nproc_per_node="${N_GPUS}" \
@@ -113,4 +121,4 @@ exec "${PYTHON}" -u -m torch.distributed.run \
     --role=rank \
     --tee=3 \
     train.py \
-    --job.config_file "${TRAIN_CONFIG}"
+    "${TRAIN_ARGS[@]}"

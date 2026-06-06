@@ -3,7 +3,7 @@
 # Submit from repo root: sbatch export_merged_pt_to_hf.slurm
 #
 # Override defaults:
-#   CHECKPOINT=/path/to.pt OUTPUT_DIR=/path/to/hf sbatch export_merged_pt_to_hf.slurm
+#   CHECKPOINT=/path/to.pt OUTPUT_DIR=/path/to/hf HF_CONFIG_DIR=/path/to/hf_template sbatch export_merged_pt_to_hf.slurm
 #
 #SBATCH --job-name=pt2hf
 #SBATCH --nodes=1
@@ -38,16 +38,19 @@ PYTHON="${CONDA_PREFIX}/bin/python"
 unset PYTHONHOME
 unset PYTHONPATH
 
-CHECKPOINT="${CHECKPOINT:-/mnt/weka/gsimonyan/checkpoints/Llama-3.2-170M/dcc4447f70bf445cb5e24cfc/step-20000_merged.pt}"
+CHECKPOINT="${CHECKPOINT:-/mnt/weka/gsimonyan/checkpoints/Llama-3.2-170M/ad16ed143de54345b194bf33/step-20000_merged.pt}"
 TRAIN_CONFIG="${TRAIN_CONFIG:-./train_configs/llama3_170m.toml}"
-OUTPUT_DIR="${OUTPUT_DIR:-/mnt/weka/gsimonyan/checkpoints/Llama-3.2-170M/dcc4447f70bf445cb5e24cfc/hf_export_step20000}"
+OUTPUT_DIR="${OUTPUT_DIR:-/mnt/weka/gsimonyan/checkpoints/Llama-3.2-170M/ad16ed143de54345b194bf33/hf_export_step20000}"
+HF_CONFIG_DIR="${HF_CONFIG_DIR:-${OUTPUT_DIR}}"
 
 echo "pt2hf job=${SLURM_JOB_ID:-local} host=$(hostname)"
 echo "CHECKPOINT=${CHECKPOINT}"
 echo "OUTPUT_DIR=${OUTPUT_DIR}"
+echo "HF_CONFIG_DIR=${HF_CONFIG_DIR}"
 
 echo "Starting at $(date -Is)"
 exec "${PYTHON}" -u export_merged_pt_to_hf.py \
     --job.config_file "${TRAIN_CONFIG}" \
     --checkpoint "${CHECKPOINT}" \
-    --output-dir "${OUTPUT_DIR}"
+    --output-dir "${OUTPUT_DIR}" \
+    --hf-config-dir "${HF_CONFIG_DIR}"

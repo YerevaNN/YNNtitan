@@ -45,8 +45,12 @@ echo "dcp_merge job=${SLURM_JOB_ID:-local} host=$(hostname)"
 echo "CHECKPOINT_DIR=${CHECKPOINT_DIR}"
 echo "OUT_PT=${OUT_PT}"
 
-if [[ ! -f "${CHECKPOINT_DIR}/.metadata" ]]; then
-    echo "ERROR: missing DCP .metadata at ${CHECKPOINT_DIR}" >&2
+if [[ ! -d "${CHECKPOINT_DIR}" ]]; then
+    echo "ERROR: missing checkpoint directory ${CHECKPOINT_DIR}" >&2
+    exit 1
+fi
+if [[ "$(find "${CHECKPOINT_DIR}" -maxdepth 1 -name '*.distcp' 2>/dev/null | wc -l)" -lt 1 ]]; then
+    echo "ERROR: no *.distcp shards in ${CHECKPOINT_DIR}" >&2
     exit 1
 fi
 

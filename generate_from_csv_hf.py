@@ -5,6 +5,11 @@
 Load a HuggingFace-exported model (e.g. from export_merged_pt_to_hf.py) and generate
 from the same CSV / sampling settings as generate_from_csv.py for side-by-side checks.
 
+Outputs may still differ from ``generate_from_csv.py`` for the reasons noted in
+that script's docstring. With ``--logits-top-k``, this script replays a forward
+pass per generated token to log raw last-position logits for the sequence that
+``generate()`` actually sampled.
+
 Example:
   python generate_from_csv_hf.py \\
     --hf-model-dir path/to/hf_export_step20000 \\
@@ -24,7 +29,7 @@ import logging
 import random
 import sys
 from pathlib import Path
-from typing import List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
@@ -48,6 +53,19 @@ def _read_prompts_csv(path: Path, column: str, delimiter: str) -> List[str]:
     return prompts
 
 
+def _top_logits_payload(
+    last_logits: torch.Tensor, k: int, chosen_id: int
+) -> Dict[str, Any]:
+    k = min(k, last_logits.numel())
+    vals, idx = torch.topk(last_logits.float(), k=k)
+    return {
+        "chosen_id": chosen_id,
+        "top_logits": [
+            {"token_id": int(i), "logit": float(v)} for v, i in zip(vals.tolist(), idx.tolist())
+        ],
+    }
+
+
 def _encode_prompt_like_titan(
     tokenizer: AutoTokenizer, prompt: str, use_bos: bool
 ) -> List[int]:
@@ -55,6 +73,28 @@ def _encode_prompt_like_titan(
     if use_bos and tokenizer.bos_token_id is not None:
         ids = [tokenizer.bos_token_id] + ids
     return ids
+
+
+@torch.inference_mode()
+def _logits_trace_for_sequence(
+    model: AutoModelForCausalLM,
+    full_ids: List[int],
+    prompt_len: int,
+    logits_top_k: int,
+    device: torch.device,
+) -> List[Dict[str, Any]]:
+    """Raw last-position logits for each chosen continuation token (replay forwards)."""
+    trace: List[Dict[str, Any]] = []
+    for step, t in enumerate(range(prompt_len, len(full_ids))):
+        prefix = full_ids[:t]
+        x = torch.tensor([prefix], dtype=torch.long, device=device)
+        out = model(x)
+        last = out.logits[0, -1]
+        chosen = full_ids[t]
+        row = _top_logits_payload(last, logits_top_k, chosen)
+        row["step"] = step
+        trace.append(row)
+    return trace
 
 
 @torch.inference_mode()
@@ -68,7 +108,8 @@ def generate_hf(
     temperature: float,
     top_p: float,
     use_bos: bool,
-) -> str:
+) -> tuple[List[int], int]:
+    """Returns (full_token_ids_after_generate, prompt_len)."""
     ids = _encode_prompt_like_titan(tokenizer, prompt, use_bos)
     if len(ids) >= max_seq_len:
         keep = max_seq_len - 1
@@ -101,7 +142,14 @@ def generate_hf(
             gen_kwargs["top_p"] = top_p
 
     out = model.generate(input_ids, **gen_kwargs)
-    new_tokens = out[0, prompt_len:].tolist()
+    full = out[0].tolist()
+    return full, prompt_len
+
+
+def _decode_new_tokens(
+    tokenizer: AutoTokenizer, full_ids: List[int], prompt_len: int
+) -> str:
+    new_tokens = full_ids[prompt_len:]
     return tokenizer.decode(new_tokens, skip_special_tokens=False)
 
 
@@ -146,6 +194,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--no-bos", action="store_true")
     parser.add_argument("--output-jsonl", type=str, default=None)
+    parser.add_argument(
+        "--logits-top-k",
+        type=int,
+        default=0,
+        help="If > 0, add 'logits_trace': top-k raw logits per generated token (replay; slower).",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     logging.basicConfig(
@@ -204,7 +258,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     for i, prompt in enumerate(chosen):
-        completion = generate_hf(
+        full_ids, prompt_len = generate_hf(
             model,
             tokenizer,
             prompt,
@@ -214,7 +268,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             top_p=args.top_p,
             use_bos=use_bos,
         )
-        record = {"index": i, "prompt": prompt, "generation": completion}
+        completion = _decode_new_tokens(tokenizer, full_ids, prompt_len)
+        record: Dict[str, Any] = {"index": i, "prompt": prompt, "generation": completion}
+        if args.logits_top_k > 0:
+            record["logits_trace"] = _logits_trace_for_sequence(
+                model,
+                full_ids,
+                prompt_len,
+                args.logits_top_k,
+                device,
+            )
+            record["prompt_token_ids"] = full_ids[:prompt_len]
         line = json.dumps(record, ensure_ascii=False)
         print(line, flush=True)
         if out_path:

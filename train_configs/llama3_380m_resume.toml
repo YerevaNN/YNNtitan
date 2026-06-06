@@ -1,0 +1,95 @@
+# Resume Llama 3.2 380M from step-18000.
+# Use the same GPU count as the original run (8 GPUs — matches 8 DCP shards).
+#
+# Submit:
+#   cd ~/YNNtitan && sbatch train_single_node.slurm
+# Or:
+#   TRAIN_CONFIG=./train_configs/llama3_380m_resume.toml sbatch train_single_node.slurm
+#
+# Quick smoke (2 steps after load; keep steps=20000 for LR schedule):
+#   TRAIN_CONFIG=./train_configs/llama3_380m_resume.toml sbatch --export=ALL,EXTRA_TRAIN_ARGS="--training.stop_at_step 18002" train_single_node.slurm
+
+[job]
+dump_folder = "/mnt/weka/gsimonyan/checkpoints"
+description = "Llama 3.2 380M resume from step 18000"
+use_for_integration_test = false
+
+[profiling]
+enable_profiling = false
+save_traces_folder = "profile_trace"
+profile_freq = 10
+enable_memory_snapshot = false
+save_memory_snapshot_folder = "memory_snapshot"
+
+[metrics]
+log_freq = 1
+enable_color_printing = true
+enable_aim = true
+save_aim_folder = "aim_llama"
+# Same Aim run as the original training → same checkpoint subdirectory (d0ef074af5b140e9ba126919).
+# Only one job may use this aim_hash at a time (Aim RocksDB lock).
+aim_hash = "d0ef074af5b140e9ba126919"
+
+[model]
+name = "llama3"
+flavor = "380M"
+norm_type = "rmsnorm"
+tokenizer_path = "/home/gsimonyan/YNNtitan/torchtitan/tokenizers/Llama-3.2-chem-1B-v2/"
+
+[optimizer]
+name = "AdamW"
+lr = 6e-4
+
+[training]
+batch_size = 14
+gradient_accumulation_steps = 9
+seq_len = 2048
+max_norm = 1.0
+warmup_steps = 500
+steps = 20000
+decay_steps_perc = 0.1
+num_decays = 1
+data_parallel_degree = -1
+tensor_parallel_degree = 1
+# Disable compile on resume to avoid inflated loss / bad optimizer step on the first step after load.
+# compile = false
+compile = true
+dataset = "chemlactica_train"
+data_processing_style = "pubchem_data_processing"
+representation_type = "SMILES"
+
+[validation]
+valid_freq = 2000
+enable_valid = true
+dataset = "chemlactica_valid"
+
+[dataloader]
+num_workers = 2
+print_first_samples = 0
+
+[experimental]
+pipeline_parallel_degree = 1
+enable_async_tensor_parallel = false
+
+[checkpoint]
+enable_checkpoint = true
+save_folder = "/mnt/weka/gsimonyan/checkpoints/Llama-3.2-380M"
+# Directory that contains step-18000/ (experiment hash from Aim)
+load_folder = "/mnt/weka/gsimonyan/checkpoints/Llama-3.2-380M/d0ef074af5b140e9ba126919"
+load_at_step = 18000
+interval_type = "steps"
+interval = 2000
+# Must stay false for resume: full checkpoints include optimizer, scheduler, dataloader, train_state.
+model_weights_only = false
+export_dtype = "float32"
+async_mode = "async_with_pinned_mem"
+verify_after_load = true
+verify_loss_max_delta = 0.25
+verify_microbatches = 1
+
+[activation_checkpoint]
+mode = 'none'
+selective_ac_option = '2'
+
+[float8]
+enable_float8_linear = false

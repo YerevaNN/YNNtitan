@@ -688,6 +688,28 @@ class JobConfig:
             help="Enable a special dataloading mode, useful for debugging",
         )
 
+        self.parser.add_argument(
+            "--dataloader.print_first_samples",
+            type=int,
+            default=0,
+            help=(
+                "Print/log the first N (raw_json, formatted_text) samples that the training "
+                "dataloader processes. 0 disables."
+            ),
+        )
+
+        self.parser.add_argument(
+            "--dataloader.log_first_model_batch_preview",
+            type=int,
+            default=0,
+            help=(
+                "If > 0, on training step 1 and data-parallel rank 0 only, log the first "
+                "microbatch: tensor shapes, first-row token IDs up to this many positions, "
+                "next-token shift check, and a short decode of the first row. 0 disables. "
+                "Useful to verify the tokenizer and windowing; keep 0 in normal runs."
+            ),
+        )
+
     def parse_args(self, args_list: list = sys.argv[1:]):
         self.args_list = args_list
 

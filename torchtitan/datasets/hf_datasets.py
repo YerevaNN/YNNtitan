@@ -110,6 +110,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         rank: int = 0,
         infinite: bool = False,
         special_mode=None,
+        print_first_samples: int = 0,
     ) -> None:
         # allow user to pass in a (local or HF hub) path to use unsupported datasets
         if dataset_name not in _supported_datasets:
@@ -171,8 +172,8 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         # debugging dataloader yielding
         self.special_mode = str(special_mode)
 
-        # number of samples to log
-        self.number_of_samples_to_log = 5
+        # Raw + formatted sample logging (dp rank 0 only; avoids N-GPU duplicate spam).
+        self.number_of_samples_to_log = print_first_samples if rank == 0 else 0
 
     def __iter__(self):
         max_buffer_token_len = 1 + self.seq_len
@@ -289,6 +290,7 @@ def build_hf_data_loader(
     pin_memory: bool = False,
     num_workers: int = 2,
     special_mode=None,
+    print_first_samples: int = 0,
 ):
     hf_ds = HuggingFaceDataset(
         dataset_name,
@@ -301,6 +303,7 @@ def build_hf_data_loader(
         rank,
         infinite,
         special_mode,
+        print_first_samples=print_first_samples,
     )
 
     return DPAwareDataLoader(
