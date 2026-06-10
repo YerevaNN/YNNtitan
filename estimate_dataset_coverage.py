@@ -22,15 +22,22 @@ _supported_datasets = {
     "c4_test": "test/assets/c4_test",
     "c4": "allenai/c4",
     "chemlactica_train_mini": "test/assets/chemlactica_train_mini",
-    "chemlactica_train": "/mnt/weka/gsimonyan/data/rdkit_computed_rel+form/train_rdkit_computed_rel+form",
     "conformers_train": "/auto/home/menuab/code/3DMolGen/data/pcqm/train",
     "conformers_valid": "/auto/home/menuab/code/3DMolGen/data/pcqm/valid",
-    "chemlactica_valid": "/mnt/weka/gsimonyan/data/rdkit_computed_rel+form",
     "chemlactica_valid_mini": "test/assets/chemlactica_valid_mini",
 }
+_chemlactica_dir = os.environ.get("CHEMLACTICA_DATA_DIR")
+if _chemlactica_dir:
+    _supported_datasets["chemlactica_train"] = os.path.join(
+        _chemlactica_dir, "train_rdkit_computed_rel+form"
+    )
+    _supported_datasets["chemlactica_valid"] = _chemlactica_dir
+
 _pubchem_dir = os.environ.get("PUBCHEM_DATA_DIR")
 if _pubchem_dir:
-    _supported_datasets["pubchem_train"] = f"{_pubchem_dir}/train_rdkit_computed_rel+form"
+    _supported_datasets["pubchem_train"] = os.path.join(
+        _pubchem_dir, "train_rdkit_computed_rel+form"
+    )
     _supported_datasets["pubchem_valid"] = _pubchem_dir
 
 _supported_data_processing_styles = {

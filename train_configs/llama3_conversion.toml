@@ -1,7 +1,7 @@
 # torchtitan Config.toml
 
 [job]
-dump_folder = "/mnt/weka/gsimonyan/checkpoints"
+dump_folder = "${oc.env:DUMP_DIR}"
 description = "Llama 3.2 training"
 use_for_integration_test = false
 
@@ -22,7 +22,7 @@ save_aim_folder = "aim_llama"
 name = "llama3"
 flavor = "170M"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / compiled_rmsnorm / fused_rmsnorm
-tokenizer_path = "/home/gsimonyan/YNNtitan/torchtitan/tokenizers/Llama-3.2-chem-1B-v1/"
+tokenizer_path = "${oc.env:TOKENIZER_PATH,torchtitan/tokenizers/Llama-3.2-chem-1B-v1/}"
 # tokenizer_path = "meta-llama/Llama-3.2-1B"
 
 [optimizer]
@@ -50,8 +50,8 @@ enable_async_tensor_parallel = false
 
 [checkpoint]
 enable_checkpoint = true
-save_folder = "/mnt/weka/gsimonyan/checkpoints/Llama-3.2-170M"
-load_folder = "/mnt/weka/gsimonyan/checkpoints/Llama-3.2-170M"
+save_folder = "Llama-3.2-170M"
+load_folder = "Llama-3.2-170M"
 # load_at_step = 0
 interval_type = "steps"
 interval = 2000

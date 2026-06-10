@@ -23,10 +23,12 @@
 #SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=184
 #SBATCH --mem=200G
-#SBATCH --partition=research
+#SBATCH --partition=h100
 #SBATCH --time=12:00:00
-#SBATCH --output=/mnt/weka/gsimonyan/results/slurm_logs/titan/job_%j/%j.out
-#SBATCH --error=/mnt/weka/gsimonyan/results/slurm_logs/titan/job_%j/%j.err
+# Log paths: set SLURM_LOG_DIR in .env_vars_dev and submit with e.g.
+#   source .env_vars_dev && sbatch --output="${SLURM_LOG_DIR}/job_%j/%j.out" --error="${SLURM_LOG_DIR}/job_%j/%j.err" train_single_node.slurm
+#SBATCH --output=logs/titan_%j.out
+#SBATCH --error=logs/titan_%j.err
 
 # If your site uses gres instead of gpus-per-node, comment the line above and use:
 # #SBATCH --gres=gpu:8
@@ -34,20 +36,24 @@
 # No `set -u`: /etc/profile.d/*.sh (e.g. byobu) often uses unset vars as empty; nounset breaks those.
 set -eo pipefail
 
-REPO_ROOT="${SLURM_SUBMIT_DIR:-/home/gsimonyan/YNNtitan}"
+REPO_ROOT="${SLURM_SUBMIT_DIR:-$(pwd)}"
 cd "${REPO_ROOT}"
 echo "titan_slurm job=${SLURM_JOB_ID:-local} host=$(hostname) repo=${REPO_ROOT}"
 
-mkdir -p /mnt/weka/gsimonyan/checkpoints /mnt/weka/gsimonyan/results/slurm_logs/titan
-
-if [[ -f .env_vars ]]; then
+if [[ -f .env_vars_dev ]]; then
+    # shellcheck source=/dev/null
+    source .env_vars_dev
+elif [[ -f .env_vars ]]; then
     # shellcheck source=/dev/null
     source .env_vars
 fi
 
+: "${DUMP_DIR:?Set DUMP_DIR in .env_vars_dev (copy from .env_vars)}"
+mkdir -p "${DUMP_DIR}" logs
+
 # Activate ynntitan before any global profile/bashrc so PATH/PYTHONPATH stay aligned with conda.
 # (Sourcing ~/.bashrc first often reorders PATH or skips conda in non-interactive jobs.)
-CONDA_ROOT="${CONDA_ROOT:-/mnt/weka/shared-cache/miniforge3}"
+CONDA_ROOT="${CONDA_ROOT:-${HOME}/miniforge3}"
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-ynntitan}"
 # shellcheck source=/dev/null
 source "${CONDA_ROOT}/etc/profile.d/conda.sh"

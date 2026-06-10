@@ -22,7 +22,10 @@ cd "${REPO_ROOT}"
 
 mkdir -p /mnt/weka/gsimonyan/results/slurm_logs/dcp_merge
 
-if [[ -f .env_vars ]]; then
+if [[ -f .env_vars_dev ]]; then
+    # shellcheck source=/dev/null
+    source .env_vars_dev
+elif [[ -f .env_vars ]]; then
     # shellcheck source=/dev/null
     source .env_vars
 fi

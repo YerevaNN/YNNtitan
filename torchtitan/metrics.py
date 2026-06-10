@@ -129,9 +129,12 @@ def build_metric_logger(job_config: JobConfig, parallel_dims: ParallelDims):
     """
     dump_dir = job_config.job.dump_folder
     aim_config = job_config.metrics
-    save_aim_folder = os.path.join(
-        job_config.job.dump_folder, aim_config.save_aim_folder
-    )
+    if os.path.isabs(aim_config.save_aim_folder):
+        save_aim_folder = aim_config.save_aim_folder
+    else:
+        save_aim_folder = os.path.join(
+            job_config.job.dump_folder, aim_config.save_aim_folder
+        )
     # since we don't have run id, use current minute as the identifier
     datetime_str = datetime.now().strftime("%Y%m%d-%H%M")
     log_dir = os.path.join(dump_dir, datetime_str)
@@ -139,7 +142,7 @@ def build_metric_logger(job_config: JobConfig, parallel_dims: ParallelDims):
     enable_aim = aim_config.enable_aim
     if enable_aim:
         logger.info(
-            f"Metrics logging active. Aim logs will be saved at /{save_aim_folder}"
+            f"Metrics logging active. Aim logs will be saved at {save_aim_folder}"
         )
         enable_aim = torch.distributed.get_rank() == 0
 

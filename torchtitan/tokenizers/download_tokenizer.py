@@ -19,7 +19,8 @@ def hf_download(repo_id: str, local_dir: str) -> None:
         return
 
     # Load the tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(repo_id, token=False)
+    # tokenizer = AutoTokenizer.from_pretrained(repo_id, token=False)
+    tokenizer = AutoTokenizer.from_pretrained(repo_id)
 
     # Save the tokenizer
     tokenizer.save_pretrained(tokenizer_dir)

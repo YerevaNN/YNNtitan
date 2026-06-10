@@ -10,7 +10,7 @@
 #   TRAIN_CONFIG=./train_configs/llama3_380m_resume.toml sbatch --export=ALL,EXTRA_TRAIN_ARGS="--training.stop_at_step 18002" train_single_node.slurm
 
 [job]
-dump_folder = "/mnt/weka/gsimonyan/checkpoints"
+dump_folder = "${oc.env:DUMP_DIR}"
 description = "Llama 3.2 380M resume from step 18000"
 use_for_integration_test = false
 
@@ -34,8 +34,7 @@ aim_hash = "d0ef074af5b140e9ba126919"
 name = "llama3"
 flavor = "380M"
 norm_type = "rmsnorm"
-tokenizer_path = "/home/gsimonyan/YNNtitan/torchtitan/tokenizers/Llama-3.2-chem-1B-v2/"
-
+tokenizer_path = "${oc.env:TOKENIZER_PATH,torchtitan/tokenizers/Llama-3.2-chem-1B-v2/}"
 [optimizer]
 name = "AdamW"
 lr = 6e-4
@@ -73,9 +72,9 @@ enable_async_tensor_parallel = false
 
 [checkpoint]
 enable_checkpoint = true
-save_folder = "/mnt/weka/gsimonyan/checkpoints/Llama-3.2-380M"
+save_folder = "Llama-3.2-380M"
 # Directory that contains step-18000/ (experiment hash from Aim)
-load_folder = "/mnt/weka/gsimonyan/checkpoints/Llama-3.2-380M/d0ef074af5b140e9ba126919"
+load_folder = "Llama-3.2-380M/d0ef074af5b140e9ba126919"
 load_at_step = 18000
 interval_type = "steps"
 interval = 2000

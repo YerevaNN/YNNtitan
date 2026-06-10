@@ -2,7 +2,7 @@
 # Data: bundled mini set (no Weka). Model: Llama3 170M. No checkpoint / aim / validation.
 
 [job]
-dump_folder = "/mnt/weka/gsimonyan/checkpoints/smoke_runs"
+dump_folder = "${oc.env:DUMP_DIR}/smoke_runs"
 description = "smoke: first-batch preview logging (multi-GPU)"
 
 [profiling]
@@ -18,8 +18,7 @@ save_aim_folder = "aim_smoke"
 name = "llama3"
 flavor = "170M"
 norm_type = "rmsnorm"
-tokenizer_path = "/home/gsimonyan/YNNtitan/torchtitan/tokenizers/Llama-3.2-chem-1B-v2/"
-
+tokenizer_path = "${oc.env:TOKENIZER_PATH,torchtitan/tokenizers/Llama-3.2-chem-1B-v2/}"
 [optimizer]
 name = "AdamW"
 lr = 6e-4

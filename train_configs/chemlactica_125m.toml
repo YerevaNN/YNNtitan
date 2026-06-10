@@ -1,7 +1,7 @@
 # torchtitan Config.toml
 
 [job]
-dump_folder = "/nfs/dgx/raid/chem/titan_outputs"
+dump_folder = "${oc.env:DUMP_DIR}"
 description = "Galactica training"
 use_for_integration_test = false
 

@@ -194,6 +194,10 @@ def main(job_config: JobConfig):
             mod.init_weights()
         mod.train()
 
+    # Weight initialization can trigger collectives (e.g., DTensor RNG sync).
+    # Ensure all ranks finish init before proceeding to avoid mismatched collectives/timeouts.
+    torch.distributed.barrier()
+
     gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
     logger.info(
         f"GPU memory usage for model: "
