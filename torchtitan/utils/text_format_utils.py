@@ -43,7 +43,8 @@ def get_tags_split(molecular_repr):
         "formula",
     }
     all_properties = set(read_special_tags().keys())
-    return list(included_properties), list(
+    # Sorted so tag sampling is stable across processes (set order is not).
+    return sorted(included_properties), sorted(
         all_properties.difference(included_properties)
     )
 
@@ -53,7 +54,9 @@ def sample_special_tags(molecular_repr, rng, sample_p=0.1):
 
     # sample the properties
     do_sample = rng.random(len(sampled_properties)) < sample_p
-    sampled_properties = [p for i, p in enumerate(sampled_properties) if do_sample[i]]
+    sampled_properties = sorted(
+        p for i, p in enumerate(sampled_properties) if do_sample[i]
+    )
 
     return {
         key: read_special_tags()[key]

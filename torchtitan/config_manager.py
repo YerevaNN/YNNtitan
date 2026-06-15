@@ -260,6 +260,24 @@ class JobConfig:
             help="How many train steps to run",
         )
         self.parser.add_argument(
+            "--training.seed",
+            type=int,
+            default=None,
+            help="Base random seed for reproducible training (None disables seeding)",
+        )
+        self.parser.add_argument(
+            "--training.deterministic",
+            type=bool,
+            default=None,
+            help="Enable deterministic training when seed is set (default: true if seed set).",
+        )
+        self.parser.add_argument(
+            "--training.deterministic_math_sdp",
+            type=bool,
+            default=False,
+            help="Use math-only SDPA for bitwise-stable attention (may OOM at long seq_len).",
+        )
+        self.parser.add_argument(
             "--training.data_parallel_degree",
             type=int,
             default=-1,
@@ -703,10 +721,30 @@ class JobConfig:
             type=int,
             default=0,
             help=(
-                "If > 0, on training step 1 and data-parallel rank 0 only, log the first "
-                "microbatch: tensor shapes, first-row token IDs up to this many positions, "
-                "next-token shift check, and a short decode of the first row. 0 disables. "
-                "Useful to verify the tokenizer and windowing; keep 0 in normal runs."
+                "If > 0, on selected training steps and data-parallel rank 0 only, log the "
+                "first microbatch: tensor shapes, first-row token IDs up to this many "
+                "positions, next-token shift check, and a short decode of the first row. "
+                "0 disables. Steps default to [1] unless --dataloader.log_model_batch_preview_steps "
+                "is set. Useful to verify the tokenizer and windowing; keep 0 in normal runs."
+            ),
+        )
+        self.parser.add_argument(
+            "--dataloader.log_model_batch_preview_steps",
+            type=int,
+            nargs="*",
+            default=[],
+            help=(
+                "Training steps at which to log the first microbatch when "
+                "--dataloader.log_first_model_batch_preview > 0. Empty means step 1 only."
+            ),
+        )
+        self.parser.add_argument(
+            "--dataloader.log_model_batch_preview_until_step",
+            type=int,
+            default=0,
+            help=(
+                "If > 0, also log batch preview for every step from 1 through this step "
+                "(in addition to log_model_batch_preview_steps)."
             ),
         )
 

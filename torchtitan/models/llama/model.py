@@ -418,13 +418,11 @@ class Transformer(nn.Module):
             )
 
     def _precompute_freqs_cis(self) -> torch.Tensor:
-        return precompute_freqs_cis(
-            self.model_args.dim // self.model_args.n_heads,
-            # Need to compute until at least the max token limit for generation
-            # (use 2x max sequence length to be safe)
-            self.model_args.max_seq_len * 2,
-            self.model_args.rope_theta,
-        )
+        head_dim = self.model_args.dim // self.model_args.n_heads
+        # Need to compute until at least the max token limit for generation
+        # (use 2x max sequence length to be safe)
+        end = self.model_args.max_seq_len * 2
+        return precompute_freqs_cis(head_dim, end, self.model_args.rope_theta)
 
     def forward(self, tokens: torch.Tensor):
         """

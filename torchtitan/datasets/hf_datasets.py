@@ -41,6 +41,8 @@ _supported_datasets = {
     "c4_test": "test/assets/c4_test",
     "c4": "allenai/c4",
     "chemlactica_train_mini": "test/assets/chemlactica_train_mini",
+    # Mini JSONL with PubChem-style fields; same files as chemlactica_train_mini.
+    "pubchem_train_mini": "test/assets/chemlactica_train_mini",
     "conformers_train": "/auto/home/menuab/code/3DMolGen/data/pcqm/train",
     "conformers_valid": "/auto/home/menuab/code/3DMolGen/data/pcqm/valid",
     # valid
@@ -118,6 +120,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         infinite: bool = False,
         special_mode=None,
         print_first_samples: int = 0,
+        seed: Optional[int] = None,
     ) -> None:
         # allow user to pass in a (local or HF hub) path to use unsupported datasets
         if dataset_name not in _supported_datasets:
@@ -143,7 +146,7 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         elif dataset_name == "c4_test":
             ds = load_dataset(dataset_path, split="train")
         else:
-            dataset_files = glob.glob(os.path.join(dataset_path, "*.jsonl"))
+            dataset_files = sorted(glob.glob(os.path.join(dataset_path, "*.jsonl")))
             ds = load_dataset(
                 "text",
                 data_files=dataset_files,
@@ -173,8 +176,12 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         self._sample_idx = 0
         self._all_tokens: List[int] = []
 
-        # random number generator
-        self.rng = np.random.default_rng()
+        rng_seed = None if seed is None else seed + rank
+        self.rng = np.random.default_rng(rng_seed)
+        self._torch_generator = None
+        if seed is not None:
+            self._torch_generator = torch.Generator()
+            self._torch_generator.manual_seed(seed + rank)
 
         # debugging dataloader yielding
         self.special_mode = str(special_mode)
@@ -190,9 +197,14 @@ class HuggingFaceDataset(IterableDataset, Stateful):
                 if self.number_of_samples_to_log > 0:
                     logger.info("yielding tensor")
                     self.number_of_samples_to_log -= 1
-                random_tensor = torch.randint(
-                    low=1, high=2, size=(max_buffer_token_len,)
-                )
+                randint_kwargs = {
+                    "low": 1,
+                    "high": 2,
+                    "size": (max_buffer_token_len,),
+                }
+                if self._torch_generator is not None:
+                    randint_kwargs["generator"] = self._torch_generator
+                random_tensor = torch.randint(**randint_kwargs)
                 yield random_tensor[:-1], random_tensor[1:]
             else:
                 for sample_json in self._get_data_iter():
@@ -243,10 +255,31 @@ class HuggingFaceDataset(IterableDataset, Stateful):
 
     def load_state_dict(self, state_dict):
         self._sample_idx = state_dict["sample_idx"]
-        self._all_tokens = state_dict["token_buffer"]
+        self._all_tokens = list(state_dict["token_buffer"])
+        rng_state = state_dict.get("rng_state")
+        if rng_state is not None:
+            self.rng = np.random.default_rng()
+            self.rng.bit_generator.state = rng_state
+        elif self.rng is not None:
+            logger.warning(
+                "Checkpoint has no rng_state for dataset %s; "
+                "data formatting may diverge after token_buffer is exhausted",
+                self.dataset_name,
+            )
+        torch_gen_state = state_dict.get("torch_generator_state")
+        if torch_gen_state is not None and self._torch_generator is not None:
+            self._torch_generator.set_state(torch_gen_state)
 
     def state_dict(self):
-        return {"token_buffer": self._all_tokens, "sample_idx": self._sample_idx}
+        state: Dict[str, Any] = {
+            "token_buffer": self._all_tokens,
+            "sample_idx": self._sample_idx,
+        }
+        if self.rng is not None:
+            state["rng_state"] = self.rng.bit_generator.state
+        if self._torch_generator is not None:
+            state["torch_generator_state"] = self._torch_generator.get_state()
+        return state
 
 
 class DPAwareDataLoader(StatefulDataLoader, Stateful):
@@ -261,8 +294,15 @@ class DPAwareDataLoader(StatefulDataLoader, Stateful):
         batch_size: int,
         pin_memory: bool,
         num_workers: int,
+        generator: Optional[torch.Generator] = None,
+        worker_init_fn=None,
     ):
-        super().__init__(hf_ds, batch_size, num_workers=num_workers)
+        loader_kwargs = {"num_workers": num_workers}
+        if generator is not None:
+            loader_kwargs["generator"] = generator
+        if worker_init_fn is not None:
+            loader_kwargs["worker_init_fn"] = worker_init_fn
+        super().__init__(hf_ds, batch_size, **loader_kwargs)
         self._dp_rank = dp_rank
         self._rank_id = f"dp_rank_{dp_rank}"
 
@@ -298,6 +338,7 @@ def build_hf_data_loader(
     num_workers: int = 2,
     special_mode=None,
     print_first_samples: int = 0,
+    seed: Optional[int] = None,
 ):
     hf_ds = HuggingFaceDataset(
         dataset_name,
@@ -311,7 +352,19 @@ def build_hf_data_loader(
         infinite,
         special_mode,
         print_first_samples=print_first_samples,
+        seed=seed,
     )
+
+    worker_init_fn = None
+    if seed is not None and num_workers > 0:
+        base_seed = seed + rank
+
+        def worker_init_fn(worker_id: int) -> None:
+            worker_seed = base_seed + worker_id
+            np.random.seed(worker_seed)
+            import random as py_random
+
+            py_random.seed(worker_seed)
 
     return DPAwareDataLoader(
         rank,
@@ -319,4 +372,6 @@ def build_hf_data_loader(
         batch_size=batch_size,
         pin_memory=pin_memory,
         num_workers=num_workers,
+        generator=getattr(hf_ds, "_torch_generator", None),
+        worker_init_fn=worker_init_fn,
     )

@@ -8,6 +8,8 @@ import os
 import time
 from datetime import timedelta
 
+from torchtitan.models.llama.utils import format_hf_rope_parameters
+
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
 from torch.fx import GraphModule
@@ -39,6 +41,10 @@ def main(job_config: JobConfig):
     init_logger(job_config.logging.log_level)
     logger.info(f"Starting job: {job_config.job.description}")
 
+    if utils.is_deterministic_training(job_config):
+        # Must be set before the first CUDA context is created.
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
     # used for colorful printing
     color = utils.Color if job_config.metrics.enable_color_printing else utils.NoColor
 
@@ -68,6 +74,13 @@ def main(job_config: JobConfig):
     else:
         dp_degree, dp_rank = 1, 0
 
+    training_seed = job_config.training.seed
+    deterministic = utils.is_deterministic_training(job_config)
+    if training_seed is not None:
+        utils.set_training_seeds(training_seed, rank=dp_rank)
+    if deterministic:
+        utils.apply_deterministic_math_sdp(job_config)
+
     model_name = job_config.model.name
     world_mesh = parallel_dims.build_mesh(device_type="cuda")
     init_device = "cpu" if job_config.checkpoint.create_seed_checkpoint else "cuda"
@@ -92,6 +105,7 @@ def main(job_config: JobConfig):
         num_workers=job_config.dataloader.num_workers,
         special_mode=job_config.dataloader.special_mode,
         print_first_samples=getattr(job_config.dataloader, "print_first_samples", 0),
+        seed=training_seed,
     )
 
     if not job_config.validation.batch_size:
@@ -115,6 +129,7 @@ def main(job_config: JobConfig):
             num_workers=job_config.dataloader.num_workers,
             special_mode=job_config.dataloader.special_mode,
             print_first_samples=0,
+            seed=training_seed,
         )
 
     # build model (using meta init)
@@ -129,6 +144,11 @@ def main(job_config: JobConfig):
     model_config.max_seq_len = job_config.training.seq_len
 
     logger.info(f"Building {model_name} {job_config.model.flavor} with {model_config}")
+    if model_name == "llama3":
+        logger.info(
+            "HF export rope_parameters:\n%s",
+            format_hf_rope_parameters(job_config.model.flavor),
+        )
     with torch.device("meta"):
         model = model_cls.from_model_args(model_config)
 
@@ -191,6 +211,8 @@ def main(job_config: JobConfig):
         if isinstance(mod, GraphModule):
             continue
         if not job_config.model_download_export.to_titan:
+            if deterministic and training_seed is not None:
+                utils.prepare_deterministic_model_init(training_seed)
             mod.init_weights()
         mod.train()
 
@@ -234,6 +256,13 @@ def main(job_config: JobConfig):
         return
 
     checkpoint_loaded = checkpoint.load(job_config.checkpoint.load_at_step)
+
+    if checkpoint_loaded and dp_rank == 0:
+        logger.info(
+            "Checkpoint loaded at step %s; next training iteration will be step %s",
+            job_config.checkpoint.load_at_step,
+            train_state.step + 1,
+        )
 
     if job_config.model_download_export.to_hf:
         assert (
@@ -298,41 +327,55 @@ def main(job_config: JobConfig):
                 preview = getattr(
                     job_config.dataloader, "log_first_model_batch_preview", 0
                 )
-                if (
-                    preview > 0
-                    and train_state.step == 1
-                    and accum_idx == 0
-                    and dp_rank == 0
-                ):
-                    i_cpu = input_ids.detach().cpu()
-                    l_cpu = labels.detach().cpu()
-                    n = min(preview, i_cpu.size(1))
-                    shift_ok = bool((i_cpu[0, 1:] == l_cpu[0, :-1]).all().item())
-                    dec_tokens = min(256, i_cpu.size(1))
-                    dec = tokenizer.decode(i_cpu[0, :dec_tokens].long().tolist())
-                    if len(dec) > 500:
-                        dec = dec[:500] + "…"
-                    logger.info(
-                        "First model batch (opt-in dataloader.log_first_model_batch_preview=%s): "
-                        "input_ids %s, labels %s, shift_ok=%s",
-                        preview,
-                        tuple(i_cpu.shape),
-                        tuple(l_cpu.shape),
-                        shift_ok,
-                    )
-                    logger.info(
-                        "  first row input_ids[0, :%s]: %s",
-                        n,
-                        i_cpu[0, :n].long().tolist(),
-                    )
-                    logger.info(
-                        "  first row   labels[0, :%s]: %s",
-                        n,
-                        l_cpu[0, :n].long().tolist(),
-                    )
-                    logger.info(
-                        "  decode(input_ids[0, :%s]) (len capped): %s", dec_tokens, dec
-                    )
+                preview_steps = getattr(
+                    job_config.dataloader, "log_model_batch_preview_steps", None
+                ) or []
+                if not preview_steps:
+                    preview_steps = [1]
+                preview_until = getattr(
+                    job_config.dataloader, "log_model_batch_preview_until_step", 0
+                ) or 0
+                should_preview = train_state.step in preview_steps or (
+                    preview_until > 0 and train_state.step <= preview_until
+                )
+                if preview > 0 and should_preview and accum_idx == 0:
+                    if dp_rank == 0:
+                        i_cpu = input_ids.detach().cpu()
+                        l_cpu = labels.detach().cpu()
+                        n = min(preview, i_cpu.size(1))
+                        shift_ok = bool((i_cpu[0, 1:] == l_cpu[0, :-1]).all().item())
+                        dec_tokens = min(256, i_cpu.size(1))
+                        dec = tokenizer.decode(i_cpu[0, :dec_tokens].long().tolist())
+                        if len(dec) > 500:
+                            dec = dec[:500] + "…"
+                        logger.info(
+                            "Model batch preview at step %s "
+                            "(dataloader.log_first_model_batch_preview=%s): "
+                            "input_ids %s, labels %s, shift_ok=%s",
+                            train_state.step,
+                            preview,
+                            tuple(i_cpu.shape),
+                            tuple(l_cpu.shape),
+                            shift_ok,
+                        )
+                        logger.info(
+                            "  first row input_ids[0, :%s]: %s",
+                            n,
+                            i_cpu[0, :n].long().tolist(),
+                        )
+                        logger.info(
+                            "  first row   labels[0, :%s]: %s",
+                            n,
+                            l_cpu[0, :n].long().tolist(),
+                        )
+                        if preview_until <= 0 or train_state.step == 1:
+                            logger.info(
+                                "  decode(input_ids[0, :%s]) (len capped): %s",
+                                dec_tokens,
+                                dec,
+                            )
+                    if world_size > 1:
+                        torch.distributed.barrier()
 
                 ntokens_since_last_log += labels.numel()
                 input_ids = input_ids.cuda()
@@ -352,7 +395,9 @@ def main(job_config: JobConfig):
 
                 for m in model_parts:
                     torch.nn.utils.clip_grad_norm_(
-                        m.parameters(), job_config.training.max_norm, foreach=True
+                        m.parameters(),
+                        job_config.training.max_norm,
+                        foreach=not deterministic,
                     )
 
             # sync float8 amaxes and scales

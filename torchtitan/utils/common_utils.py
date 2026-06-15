@@ -6,11 +6,13 @@
 
 import gc
 import os
+import random
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Union
 import contextlib
 
+import numpy as np
 import torch
 import torch.distributed._functional_collectives as funcol
 import torch.distributed.distributed_c10d as c10d
@@ -96,6 +98,80 @@ TRACE_FILE = "TORCH_NCCL_DEBUG_INFO_TEMP_FILE"
 DUMP_ON_TIMEOUT = "TORCH_NCCL_DUMP_ON_TIMEOUT"
 ASYNC_ERROR_HANDLING = "TORCH_NCCL_ASYNC_ERROR_HANDLING"
 SKIP_CLEANUP = "3"
+
+
+def set_training_seeds(seed: int, rank: int = 0) -> None:
+    """Seed RNGs and CUDA settings for reproducible training.
+
+    Model init uses a shared ``seed`` on every rank (DTensor/FSDP). Data and
+    Python RNGs use ``seed + rank`` per data-parallel rank.
+  """
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
+    random.seed(seed + rank)
+    np.random.seed(seed + rank)
+    # Shared across ranks so sharded init_weights stays consistent run-to-run.
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+    _seed_dtensor_rng(seed)
+
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cuda.matmul.allow_tf32 = False
+    if hasattr(torch.backends.cuda.matmul, "allow_bf16_reduced_precision_reduction"):
+        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = False
+    if hasattr(torch, "set_float32_matmul_precision"):
+        torch.set_float32_matmul_precision("highest")
+
+    # warn_only skips ops with no deterministic implementation instead of crashing.
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    logger.info(
+        f"Deterministic training enabled (seed={seed}, data_rank={rank})"
+    )
+
+
+def apply_deterministic_math_sdp(job_config) -> None:
+    """Disable flash/mem-efficient SDPA for bitwise-stable attention (may OOM)."""
+    if not getattr(job_config.training, "deterministic_math_sdp", False):
+        return
+    if not is_deterministic_training(job_config):
+        return
+    torch.backends.cuda.enable_flash_sdp(False)
+    torch.backends.cuda.enable_mem_efficient_sdp(False)
+    torch.backends.cuda.enable_math_sdp(True)
+    logger.info(
+        "Deterministic math-only SDPA enabled (flash and mem-efficient SDPA disabled)"
+    )
+
+
+def _seed_dtensor_rng(seed: int) -> None:
+    try:
+        from torch.distributed.tensor import manual_seed as dtensor_manual_seed
+
+        dtensor_manual_seed(seed)
+    except (ImportError, AttributeError):
+        pass
+
+
+def prepare_deterministic_model_init(seed: int) -> None:
+    """Re-sync shared model-init RNG immediately before init_weights."""
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    _seed_dtensor_rng(seed)
+
+
+def is_deterministic_training(job_config) -> bool:
+    training = job_config.training
+    if getattr(training, "deterministic", None) is False:
+        return False
+    return getattr(training, "seed", None) is not None
 
 
 def init_distributed(job_config):

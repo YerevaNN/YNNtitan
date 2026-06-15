@@ -4,6 +4,9 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import json
+import os
+
 import torch
 from torchtitan.logging import logger
 from torchtitan.models.llama import Transformer
@@ -138,15 +141,12 @@ def download_llama3_weights(
         raise NotImplementedError
 
 
-def model_args_to_hf_config(model_args):
-    # find model size
-    model_size = None
-    for s, m_args in llama3_configs.items():
-        if m_args == model_args:
-            model_size = s
-            break
+def _hf_hub_token() -> str | None:
+    return os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or None
 
-    base_config_name = {
+
+def _hf_base_config_name(model_size: str) -> str:
+    return {
         "27M": "meta-llama/Llama-3.2-1B",
         "100M": "meta-llama/Llama-3.2-1B",
         "170M": "meta-llama/Llama-3.2-1B",
@@ -154,27 +154,71 @@ def model_args_to_hf_config(model_args):
         "750M": "meta-llama/Llama-3.2-1B",
         "1B": "meta-llama/Llama-3.2-1B",
         "3B": "meta-llama/Llama-3.2-3B",
-        "7B": "meta-llama/Llama-3.2-7B",
+        "8B": "meta-llama/Llama-3.2-1B",
+        "70B": "meta-llama/Llama-3.2-3B",
+        "405B": "meta-llama/Llama-3.2-3B",
     }[model_size]
+
+
+def _auto_config_from_pretrained(base_config_name: str, **kwargs):
+    token = _hf_hub_token()
+    try:
+        return AutoConfig.from_pretrained(base_config_name, token=token, **kwargs)
+    except OSError as err:
+        template = os.environ.get("HF_LLAMA_CONFIG_TEMPLATE")
+        if not template:
+            raise OSError(
+                f"Could not load gated config {base_config_name}: {err}. "
+                "Accept the model license on Hugging Face, set HF_TOKEN, or set "
+                "HF_LLAMA_CONFIG_TEMPLATE to a local config.json directory."
+            ) from err
+        logger.warning(
+            "Could not load %s; using HF_LLAMA_CONFIG_TEMPLATE at %s",
+            base_config_name,
+            template,
+        )
+        return AutoConfig.from_pretrained(template, token=token, **kwargs)
+
+
+def format_hf_rope_parameters(flavor: str) -> str:
+    """Pretty-print HF export rope_parameters for a llama3 flavor."""
+    if flavor not in llama3_configs:
+        raise ValueError(f"Unknown llama3 flavor: {flavor}")
+    hf_config = model_args_to_hf_config(llama3_configs[flavor])
+    rope_parameters = getattr(hf_config, "rope_parameters", None)
+    if rope_parameters is None:
+        rope_parameters = hf_config.to_dict().get("rope_parameters", {})
+    return json.dumps({"rope_parameters": rope_parameters}, indent=2)
+
+
+def model_args_to_hf_config(model_args):
+    # find model size
+    model_size = None
+    for s, m_args in llama3_configs.items():
+        if m_args == model_args:
+            model_size = s
+            break
+    if model_size is None:
+        raise ValueError(f"Unknown llama3 ModelArgs: {model_args}")
+
+    base_config_name = _hf_base_config_name(model_size)
     llama_config = llama3_configs[model_size]
     if model_size in ["27M", "100M", "170M", "380M", "750M"]:
-        base_config = AutoConfig.from_pretrained(
+        return _auto_config_from_pretrained(
             base_config_name,
             hidden_size=llama_config.dim,
             num_hidden_layers=llama_config.n_layers,
             num_attention_heads=llama_config.n_heads,
             num_key_value_heads=llama_config.n_kv_heads,
             head_dim=llama_config.dim // llama_config.n_heads,
-            intermediate_size=4 * llama3_configs[model_size].dim,
-            rope_theta=llama_config.rope_theta,
-        )
-    else:
-        base_config = AutoConfig.from_pretrained(
-            base_config_name,
+            intermediate_size=4 * llama_config.dim,
             rope_theta=llama_config.rope_theta,
         )
 
-    return base_config
+    return _auto_config_from_pretrained(
+        base_config_name,
+        rope_theta=llama_config.rope_theta,
+    )
 
 
 def export_llama3_weights(
@@ -189,6 +233,8 @@ def export_llama3_weights(
     """
 
     model_config = model_args_to_hf_config(model.model_args)
+    model_config.bos_token_id = tokenizer.bos_token_id
+    model_config.eos_token_id = tokenizer.eos_token_id
     # include dtype in hf config
     model_config.torch_dtype = next(model.parameters()).dtype
     hf_model = AutoModelForCausalLM.from_config(model_config)
