@@ -24,3 +24,6 @@ _remote_module_non_scriptable.py
 .venv-aim
 logs/
 training_tests/
+
+# slurm job scripts (machine-specific)
+*.slurm
