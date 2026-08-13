@@ -5,14 +5,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-import os
 
 import torch
 from torchtitan.logging import logger
-from torchtitan.models.llama import Transformer
 from torchtitan.models.llama.configs import llama3_configs
+from torchtitan.models.llama.model import ModelArgs, Transformer
 
-from transformers import AutoConfig, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, LlamaConfig
 
 
 # reverse_permute for sliced rotary
@@ -141,45 +140,6 @@ def download_llama3_weights(
         raise NotImplementedError
 
 
-def _hf_hub_token() -> str | None:
-    return os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or None
-
-
-def _hf_base_config_name(model_size: str) -> str:
-    return {
-        "27M": "meta-llama/Llama-3.2-1B",
-        "100M": "meta-llama/Llama-3.2-1B",
-        "170M": "meta-llama/Llama-3.2-1B",
-        "380M": "meta-llama/Llama-3.2-1B",
-        "750M": "meta-llama/Llama-3.2-1B",
-        "1B": "meta-llama/Llama-3.2-1B",
-        "3B": "meta-llama/Llama-3.2-3B",
-        "8B": "meta-llama/Llama-3.2-1B",
-        "70B": "meta-llama/Llama-3.2-3B",
-        "405B": "meta-llama/Llama-3.2-3B",
-    }[model_size]
-
-
-def _auto_config_from_pretrained(base_config_name: str, **kwargs):
-    token = _hf_hub_token()
-    try:
-        return AutoConfig.from_pretrained(base_config_name, token=token, **kwargs)
-    except OSError as err:
-        template = os.environ.get("HF_LLAMA_CONFIG_TEMPLATE")
-        if not template:
-            raise OSError(
-                f"Could not load gated config {base_config_name}: {err}. "
-                "Accept the model license on Hugging Face, set HF_TOKEN, or set "
-                "HF_LLAMA_CONFIG_TEMPLATE to a local config.json directory."
-            ) from err
-        logger.warning(
-            "Could not load %s; using HF_LLAMA_CONFIG_TEMPLATE at %s",
-            base_config_name,
-            template,
-        )
-        return AutoConfig.from_pretrained(template, token=token, **kwargs)
-
-
 def format_hf_rope_parameters(flavor: str) -> str:
     """Pretty-print HF export rope_parameters for a llama3 flavor."""
     if flavor not in llama3_configs:
@@ -191,33 +151,40 @@ def format_hf_rope_parameters(flavor: str) -> str:
     return json.dumps({"rope_parameters": rope_parameters}, indent=2)
 
 
-def model_args_to_hf_config(model_args):
-    # find model size
-    model_size = None
-    for s, m_args in llama3_configs.items():
-        if m_args == model_args:
-            model_size = s
-            break
-    if model_size is None:
-        raise ValueError(f"Unknown llama3 ModelArgs: {model_args}")
+def _titan_ffn_hidden_dim(model_args: ModelArgs) -> int:
+    """Match FeedForward hidden dim used in training."""
+    hidden_dim = 4 * model_args.dim
+    if model_args.ffn_dim_multiplier is not None:
+        hidden_dim = int(model_args.ffn_dim_multiplier * hidden_dim)
+    multiple_of = model_args.multiple_of
+    return multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
-    base_config_name = _hf_base_config_name(model_size)
-    llama_config = llama3_configs[model_size]
-    if model_size in ["27M", "100M", "170M", "380M", "750M"]:
-        return _auto_config_from_pretrained(
-            base_config_name,
-            hidden_size=llama_config.dim,
-            num_hidden_layers=llama_config.n_layers,
-            num_attention_heads=llama_config.n_heads,
-            num_key_value_heads=llama_config.n_kv_heads,
-            head_dim=llama_config.dim // llama_config.n_heads,
-            intermediate_size=4 * llama_config.dim,
-            rope_theta=llama_config.rope_theta,
-        )
 
-    return _auto_config_from_pretrained(
-        base_config_name,
-        rope_theta=llama_config.rope_theta,
+def model_args_to_hf_config(model_args: ModelArgs) -> LlamaConfig:
+    """Build a HuggingFace LlamaConfig from the training ModelArgs.
+
+    Does not load a Hub / local Llama-3.2 template. RoPE is the same simple
+    (default) rotary used in training: ``precompute_freqs_cis(..., rope_theta)``.
+    """
+    n_kv_heads = (
+        model_args.n_heads if model_args.n_kv_heads is None else model_args.n_kv_heads
+    )
+    vocab_size = model_args.vocab_size if model_args.vocab_size > 0 else 32000
+    return LlamaConfig(
+        hidden_size=model_args.dim,
+        num_hidden_layers=model_args.n_layers,
+        num_attention_heads=model_args.n_heads,
+        num_key_value_heads=n_kv_heads,
+        head_dim=model_args.dim // model_args.n_heads,
+        intermediate_size=_titan_ffn_hidden_dim(model_args),
+        rms_norm_eps=model_args.norm_eps,
+        rope_theta=model_args.rope_theta,
+        max_position_embeddings=model_args.max_seq_len,
+        vocab_size=vocab_size,
+        tie_word_embeddings=model_args.share_embeddings,
+        hidden_act="silu",
+        attention_bias=False,
+        mlp_bias=False,
     )
 
 

@@ -1,17 +1,25 @@
-# Llama 3.2 380M "ranged" — chemllama-style training + HF export.
-# Training uses simple RoPE (rope_theta=500000 on 380M flavor, pre-c4a648f).
-# HF export inherits llama3 rope_parameters from the Llama-3.2-1B config template.
+# Llama 3.2 380M — 6 GPU FSDP, matched to 170M data/steps except architecture + batch.
+#
+# Shared with 170M job 72069: 6 GPU FSDP, chemlactica_train/valid, v2 tokenizer,
+#   seq_len=2048, steps=20000, warmup=500, rope_theta=10000, compile=true,
+#   AdamW lr=6e-4.
+# 380M-specific: global batch 756 (batch_size 14 × grad_accum 9 × 6 GPUs),
+#   seed=42. 170M used global batch 768 (16 × 8 × 6).
+#
+# Architecture only (flavor "380M"): dim=1024, n_layers=16, n_heads=16, n_kv_heads=8,
+#   default FFN (ffn dim 4096). 170M: dim=768, n_layers=8, n_heads=16, n_kv_heads=8,
+#   default FFN (ffn dim 3072).
 #
 # Submit:
 #   source .env_vars_dev
-#   TRAIN_CONFIG=./train_configs/llama3_380m_ranged.toml N_GPUS=6 \
-#     sbatch --time=24:00:00 --gpus-per-node=6 --cpus-per-task=138 \
+#   TRAIN_CONFIG=./train_configs/llama3.2_380m_scale.toml N_GPUS=6 \
+#     sbatch --gpus-per-node=6 --cpus-per-task=64 --mem=128G \
 #     --output="${SLURM_LOG_DIR}/job_%j/%j.out" --error="${SLURM_LOG_DIR}/job_%j/%j.err" \
 #     train_single_node.slurm
 
 [job]
 dump_folder = "${oc.env:DUMP_DIR}"
-description = "Llama 3.2 380M ranged (chemllama-style export)"
+description = "Llama 3.2 380M scale (6 GPU, seed=42, theta=10000, gbs=756)"
 use_for_integration_test = false
 
 [profiling]
@@ -25,7 +33,10 @@ save_memory_snapshot_folder = "memory_snapshot"
 log_freq = 1
 enable_color_printing = true
 enable_aim = true
-save_aim_folder = "ranged_models"
+save_aim_folder = "aim_llama"
+
+[logging]
+log_level = "INFO"
 
 [model]
 name = "llama3"
@@ -41,8 +52,8 @@ lr = 6e-4
 batch_size = 14
 gradient_accumulation_steps = 9
 seq_len = 2048
-max_norm = 1.0
 warmup_steps = 500
+max_norm = 1.0
 steps = 20000
 decay_steps_perc = 0.1
 num_decays = 1
@@ -64,6 +75,8 @@ dataset = "chemlactica_valid"
 [dataloader]
 num_workers = 2
 print_first_samples = 5
+log_first_model_batch_preview = 64
+log_model_batch_preview_steps = [1]
 
 [experimental]
 pipeline_parallel_degree = 1
@@ -71,7 +84,7 @@ enable_async_tensor_parallel = false
 
 [checkpoint]
 enable_checkpoint = true
-save_folder = "chemllama-380M-ranged"
+save_folder = "Llama-3.2-380M"
 interval_type = "steps"
 interval = 2000
 model_weights_only = false
@@ -79,8 +92,8 @@ export_dtype = "float32"
 async_mode = "disabled"
 
 [activation_checkpoint]
-mode = 'none'
-selective_ac_option = '2'
+mode = "none"
+selective_ac_option = "2"
 
 [float8]
 enable_float8_linear = false

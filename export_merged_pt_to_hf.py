@@ -30,17 +30,6 @@ from torchtitan.models.llama.utils import export_llama3_weights
 from torchtitan.tokenizers.tokenizer import build_tokenizer
 
 
-def _resolve_hf_config_dir(hf_config_dir: str | None, output_dir: Path) -> Path:
-    if hf_config_dir:
-        return Path(hf_config_dir).resolve()
-    if (output_dir / "config.json").is_file():
-        return output_dir
-    raise ValueError(
-        "Pass --hf-config-dir to a local HF export folder containing config.json "
-        "(for example your 170M hf_export_step20000 directory)."
-    )
-
-
 def _load_titan_from_merged_pt(
     job_config: JobConfig, checkpoint_path: Path, device: torch.device
 ):
@@ -92,15 +81,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Directory for HF config + weights (created if missing).",
     )
     parser.add_argument(
-        "--hf-config-dir",
-        type=str,
-        default=None,
-        help=(
-            "Local HF folder with config.json used as the architecture template. "
-            "Defaults to --output-dir when config.json already exists there."
-        ),
-    )
-    parser.add_argument(
         "--device",
         type=str,
         default="cuda",
@@ -136,8 +116,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise RuntimeError("CUDA is required for export (verification runs on GPU).")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    if args_ns.hf_config_dir:
-        _resolve_hf_config_dir(args_ns.hf_config_dir, output_dir)
 
     model, tokenizer = _load_titan_from_merged_pt(
         job_config, checkpoint_path, device=device
