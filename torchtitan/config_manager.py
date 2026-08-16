@@ -162,7 +162,20 @@ class JobConfig:
             "--model.flavor",
             type=str,
             default="debugmodel",
-            help="Which model config to train",
+            help=(
+                "Model config: a name from configs.py (e.g. 170M, 380M, 3B), "
+                "or official Llama-3.2-1B / Llama-3.2-3B (Hub architecture + rope_theta)."
+            ),
+        )
+        self.parser.add_argument(
+            "--model.init",
+            type=str,
+            default="random",
+            choices=["random", "weights"],
+            help=(
+                "random: start from scratch. weights: load HuggingFace weights "
+                "(only with flavor Llama-3.2-1B or Llama-3.2-3B)."
+            ),
         )
         self.parser.add_argument(
             "--model.norm_type",

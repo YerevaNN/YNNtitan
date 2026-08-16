@@ -5,13 +5,21 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
+import os
 
 import torch
 from torchtitan.logging import logger
 from torchtitan.models.llama.configs import llama3_configs
 from torchtitan.models.llama.model import ModelArgs, Transformer
 
-from transformers import AutoModelForCausalLM, LlamaConfig
+from transformers import AutoConfig, AutoModelForCausalLM, LlamaConfig
+
+# Official Llama 3.2 checkpoints (gated). Sizes match our "1B" / "3B" flavors;
+# RoPE theta and other HF fields come from the Hub config.
+OFFICIAL_LLAMA32 = {
+    "Llama-3.2-1B": "meta-llama/Llama-3.2-1B",
+    "Llama-3.2-3B": "meta-llama/Llama-3.2-3B",
+}
 
 
 # reverse_permute for sliced rotary
@@ -93,12 +101,15 @@ def download_llama3_weights(
     tokenizer,
     source: str,
     token_embedding_size: int,
+    verify: bool = True,
 ):
     """
     write docs
     """
     if source == "huggingface":
-        hf_model = AutoModelForCausalLM.from_pretrained(weights_path)
+        hf_model = AutoModelForCausalLM.from_pretrained(
+            weights_path, token=_hf_token()
+        )
         hf_model.resize_token_embeddings(new_num_tokens=token_embedding_size)
         include_lm_head = not model.model_args.share_embeddings
         keys_mapping = get_hf_llama3_state_dict_keys_mapping(
@@ -132,12 +143,103 @@ def download_llama3_weights(
             corrected_state_dict["freqs_cis"] = model._precompute_freqs_cis()
 
         model.load_state_dict(corrected_state_dict)
-        verify_logits_matching(
-            model=model, hf_model=hf_model, tokenizer=tokenizer, atol=0.1
-        )
+        if verify:
+            verify_logits_matching(
+                model=model, hf_model=hf_model, tokenizer=tokenizer, atol=0.1
+            )
         logger.info("Successfully loaded Llama 3 model to titan model.")
     else:
         raise NotImplementedError
+
+
+def _hf_token() -> str | None:
+    return os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or None
+
+
+def is_official_llama32_flavor(flavor: str) -> bool:
+    return flavor in OFFICIAL_LLAMA32
+
+
+def _ffn_args_for_intermediate(dim: int, intermediate_size: int):
+    """Invert titan FeedForward sizing so hidden dim matches HF intermediate_size."""
+    base = 4 * dim
+    if intermediate_size == base:
+        return None, 256
+    for multiple_of in (256, 1):
+        multiplier = intermediate_size / base
+        hidden = int(multiplier * base)
+        hidden = multiple_of * ((hidden + multiple_of - 1) // multiple_of)
+        if hidden == intermediate_size:
+            return multiplier, multiple_of
+    raise ValueError(
+        f"Cannot map HF intermediate_size={intermediate_size} with dim={dim} "
+        "onto titan FFN (4*dim * multiplier, rounded to multiple_of)."
+    )
+
+
+def _rope_theta_from_hf_config(hf_config) -> float:
+    rope_parameters = getattr(hf_config, "rope_parameters", None)
+    if isinstance(rope_parameters, dict) and rope_parameters.get("rope_theta") is not None:
+        return float(rope_parameters["rope_theta"])
+    rope_theta = getattr(hf_config, "rope_theta", None)
+    if rope_theta is not None:
+        return float(rope_theta)
+    return 500000.0
+
+
+def model_args_from_hf_config(hf_config) -> ModelArgs:
+    dim = int(hf_config.hidden_size)
+    n_heads = int(hf_config.num_attention_heads)
+    n_kv_heads = int(
+        getattr(hf_config, "num_key_value_heads", None) or n_heads
+    )
+    intermediate_size = int(hf_config.intermediate_size)
+    ffn_dim_multiplier, multiple_of = _ffn_args_for_intermediate(
+        dim, intermediate_size
+    )
+    return ModelArgs(
+        dim=dim,
+        n_layers=int(hf_config.num_hidden_layers),
+        n_heads=n_heads,
+        n_kv_heads=n_kv_heads,
+        rope_theta=_rope_theta_from_hf_config(hf_config),
+        norm_eps=float(getattr(hf_config, "rms_norm_eps", 1e-5)),
+        share_embeddings=bool(getattr(hf_config, "tie_word_embeddings", False)),
+        ffn_dim_multiplier=ffn_dim_multiplier,
+        multiple_of=multiple_of,
+    )
+
+
+def resolve_llama3_model_args(flavor: str) -> ModelArgs:
+    """Our configs.py flavor, or official Llama-3.2-1B / Llama-3.2-3B from the Hub."""
+    if flavor in llama3_configs:
+        return llama3_configs[flavor]
+    if not is_official_llama32_flavor(flavor):
+        known = sorted(list(llama3_configs) + list(OFFICIAL_LLAMA32))
+        raise ValueError(f"Unknown llama3 flavor {flavor!r}. Known: {known}")
+    hub_id = OFFICIAL_LLAMA32[flavor]
+    token = _hf_token()
+    try:
+        hf_config = AutoConfig.from_pretrained(hub_id, token=token)
+    except OSError as err:
+        raise OSError(
+            f"Could not load {hub_id}: {err}. "
+            "Accept the model license on Hugging Face and set HF_TOKEN."
+        ) from err
+    model_args = model_args_from_hf_config(hf_config)
+    rope_parameters = getattr(hf_config, "rope_parameters", None)
+    rope_type = None
+    if isinstance(rope_parameters, dict):
+        rope_type = rope_parameters.get("rope_type")
+    logger.info(
+        "Using official %s config from %s (sizes + rope_theta=%s). "
+        "Training still uses simple RoPE; HF rope_type=%s is not applied.",
+        flavor,
+        hub_id,
+        model_args.rope_theta,
+        rope_type,
+    )
+    return model_args
 
 
 def format_hf_rope_parameters(flavor: str) -> str:

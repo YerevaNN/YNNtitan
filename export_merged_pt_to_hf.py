@@ -26,7 +26,7 @@ import torch
 from torchtitan.config_manager import JobConfig
 from torchtitan.logging import init_logger, logger
 from torchtitan.models import model_name_to_cls, model_name_to_tokenizer, models_config
-from torchtitan.models.llama.utils import export_llama3_weights
+from torchtitan.models.llama.utils import export_llama3_weights, resolve_llama3_model_args
 from torchtitan.tokenizers.tokenizer import build_tokenizer
 
 
@@ -37,7 +37,10 @@ def _load_titan_from_merged_pt(
     tokenizer_type = model_name_to_tokenizer[model_name]
     tokenizer = build_tokenizer(tokenizer_type, job_config.model.tokenizer_path)
 
-    model_config = models_config[model_name][job_config.model.flavor]
+    if model_name == "llama3":
+        model_config = resolve_llama3_model_args(job_config.model.flavor)
+    else:
+        model_config = models_config[model_name][job_config.model.flavor]
     model_config.norm_type = job_config.model.norm_type
     model_config.vocab_size = tokenizer.padded_n_words
     model_config.max_seq_len = job_config.training.seq_len

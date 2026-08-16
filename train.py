@@ -8,7 +8,12 @@ import os
 import time
 from datetime import timedelta
 
-from torchtitan.models.llama.utils import format_hf_rope_parameters
+from torchtitan.models.llama.utils import (
+    OFFICIAL_LLAMA32,
+    format_hf_rope_parameters,
+    is_official_llama32_flavor,
+    resolve_llama3_model_args,
+)
 
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
@@ -134,7 +139,18 @@ def main(job_config: JobConfig):
 
     # build model (using meta init)
     model_cls = model_name_to_cls[model_name]
-    model_config = models_config[model_name][job_config.model.flavor]
+    model_init = getattr(job_config.model, "init", "random")
+    if model_name == "llama3":
+        model_config = resolve_llama3_model_args(job_config.model.flavor)
+    else:
+        model_config = models_config[model_name][job_config.model.flavor]
+    if model_init == "weights" and not is_official_llama32_flavor(
+        job_config.model.flavor
+    ):
+        raise ValueError(
+            "model.init=weights only works with flavor Llama-3.2-1B or Llama-3.2-3B. "
+            "For our configs.py flavors use random init, or to_titan + a titan checkpoint."
+        )
     # set the model configs from training inputs:
     # 1. norm type to decide which norm layer to use
     # 2. vocab size from tokenizer
@@ -144,7 +160,7 @@ def main(job_config: JobConfig):
     model_config.max_seq_len = job_config.training.seq_len
 
     logger.info(f"Building {model_name} {job_config.model.flavor} with {model_config}")
-    if model_name == "llama3":
+    if model_name == "llama3" and job_config.model.flavor in models_config["llama3"]:
         logger.info(
             "HF export rope_parameters:\n%s",
             format_hf_rope_parameters(job_config.model.flavor),
@@ -152,6 +168,7 @@ def main(job_config: JobConfig):
     with torch.device("meta"):
         model = model_cls.from_model_args(model_config)
 
+    load_hf_weights = model_init == "weights"
     # load the model on rank 0 only, then FSDP will distribute the weights
     if job_config.model_download_export.to_titan:
         assert (
@@ -164,6 +181,27 @@ def main(job_config: JobConfig):
             tokenizer=tokenizer.model,
             source=job_config.model_download_export.weights_source,
             token_embedding_size=model_config.vocab_size,
+        )
+    elif load_hf_weights:
+        model.to_empty(device=init_device)
+        hub_id = OFFICIAL_LLAMA32[job_config.model.flavor]
+        rank = int(os.environ["RANK"])
+        if rank == 0:
+            model_name_to_weights_download_fns[model_name](
+                model,
+                weights_path=hub_id,
+                tokenizer=tokenizer.model,
+                source="huggingface",
+                token_embedding_size=model_config.vocab_size,
+                verify=False,
+            )
+        if world_size > 1:
+            for tensor in list(model.parameters()) + list(model.buffers()):
+                torch.distributed.broadcast(tensor.data, src=0)
+        logger.info(
+            "Loaded HuggingFace weights from %s (init=weights). "
+            "Skipped logit check: titan uses simple RoPE, official Llama 3.2 uses scaled RoPE.",
+            hub_id,
         )
 
     # a no-op hander if float8 is not enabled
@@ -202,7 +240,7 @@ def main(job_config: JobConfig):
     models_parallelize_fns[model_name](model, world_mesh, parallel_dims, job_config)
 
     # move sharded model to CPU/GPU and initialize weights via DTensor
-    if not job_config.model_download_export.to_titan:
+    if not job_config.model_download_export.to_titan and not load_hf_weights:
         model.to_empty(device=init_device)
     model_parts = [model]
 
@@ -210,7 +248,7 @@ def main(job_config: JobConfig):
         # skip traced modules since we do not define init_weights in the traced module
         if isinstance(mod, GraphModule):
             continue
-        if not job_config.model_download_export.to_titan:
+        if not job_config.model_download_export.to_titan and not load_hf_weights:
             if deterministic and training_seed is not None:
                 utils.prepare_deterministic_model_init(training_seed)
             mod.init_weights()
